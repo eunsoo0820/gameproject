@@ -18,3 +18,9 @@
 *.booproj
 *.svd
 *.log
+Backups/
+Validation/bin/
+Validation/obj/
+Validation/*.dll
+Validation/*.rsp
+!Validation/DriftRules.csproj
