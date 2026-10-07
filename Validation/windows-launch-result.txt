@@ -1,0 +1,1 @@
+PASS: Windows x64 development player stayed running for 12 seconds with graphics enabled; no matching startup exceptions. Automated startup smoke test only, not manual standalone playthrough.

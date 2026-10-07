@@ -209,6 +209,7 @@ namespace Drift
             Back(panel, () => app.Navigate(ScreenId.Playing)); chatInput.ActivateInputField();
         }
         public void Toast(string text) { notice.text = text; noticeUntil = Time.unscaledTime + 4; }
+        public void ClearNotice() { notice.text = ""; noticeUntil = 0; }
         public void SetFade(float alpha) { fade.gameObject.SetActive(alpha > 0); fade.color = new Color(0, 0, 0, alpha); }
         public void RefreshHud()
         {

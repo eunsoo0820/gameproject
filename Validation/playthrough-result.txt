@@ -1,0 +1,12 @@
+PASS: F reads actual wall note
+PASS: F picks up fishing rod
+PASS: Fishing completes food objective
+PASS: Purifier inspection
+PASS: Refuel consumes fuel
+PASS: Four tasks trigger radio alarm
+PASS: Radio opens warning dialogue
+PASS: Radio ends and gull breaks purifier
+PASS: Repair consumes filter part
+PASS: Held left key steers actual ship west
+PASS: Entire tutorial completes
+ALL PASSED

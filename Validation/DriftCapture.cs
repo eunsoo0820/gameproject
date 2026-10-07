@@ -4,8 +4,14 @@ using UnityEngine;
 
 public static class DriftCapture
 {
-    public static string Capture(string file, int width = 1280, int height = 720)
+    public static string Capture(string file, int width = 1280, int height = 720, string screen = null)
     {
+        if (screen != null)
+        {
+            var app = UnityEngine.Object.FindAnyObjectByType<Drift.DriftApplication>();
+            if (screen == "Menu") app.EndVoyage();
+            else app.Navigate((Drift.ScreenId)Enum.Parse(typeof(Drift.ScreenId), screen));
+        }
         var camera = Camera.main;
         var canvas = UnityEngine.Object.FindAnyObjectByType<Canvas>();
         if (camera == null || canvas == null) throw new InvalidOperationException("Start Drift Play Mode first.");

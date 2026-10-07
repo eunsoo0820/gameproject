@@ -1,0 +1,7 @@
+Result: Succeeded
+Errors: 0; warnings: 2
+Duration: 00:00:10.9673995
+Bytes: 188626640
+Output: C:\Users\kim01\OneDrive\Desktop\gameproject\Builds\Windows-20261006\drift.exe
+Warning: [ServicesCore]: To use Unity's dashboard services, you need to link your Unity project to a project ID. To do this, go to Project Settings to select your organization, select your project and then link a project ID. You also need to make sure your organization has access to the required products. Visit https://dashboard.unity3d.com to sign up.
+Warning: Pipeline: No RuntimePipelineConfig asset found (Project Settings > Pipeline > Runtime). Pipeline will be disabled in Player builds.

@@ -51,6 +51,7 @@ namespace Drift
         public void CreateRoom() => Navigate(ScreenId.Room);
         public void StartVoyage()
         {
+            ui.ClearNotice();
             State = new DriftState(); World.Reset(); view.ResetView(); atHelm = false;
             fadeRemaining = 3; radioRemaining = 0; gullRemaining = -1; fishCooldown = 0; chat.Clear();
             audioSystem.Stop(); audioSystem.StartSea(); World.RefreshMarkers(State);
@@ -58,6 +59,7 @@ namespace Drift
         }
         public void EndVoyage()
         {
+            ui.ClearNotice();
             atHelm = false; State = null; audioSystem.Stop(); fadeRemaining = 0; radioRemaining = 0; gullRemaining = -1;
             World.Reset(); view.Preview(); ui.SetFade(0); Navigate(ScreenId.Menu);
         }
@@ -258,7 +260,7 @@ namespace Drift
                 return quest.ToString();
             }
         }
-        private void QuestLine(bool done, string text) { quest.Append(done ? "✓ " : "○ "); quest.AppendLine(text); }
+        private void QuestLine(bool done, string text) { quest.Append(done ? T("[완료] ", "[Done] ") : "○ "); quest.AppendLine(text); }
         private void OnApplicationFocus(bool focused)
         {
             if (!focused && ui != null && Screen == ScreenId.Playing) Navigate(ScreenId.Pause);
