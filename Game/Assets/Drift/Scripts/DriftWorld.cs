@@ -111,7 +111,9 @@ namespace Drift
             for (int row = 0; row < rowCount; row++)
             {
                 float z = -extent + row * step;
-                float opening = Mathf.Abs(z) <= 15.1f ? HullBeamAt(z) + .42f : 0f;
+                // Keep the clear water opening inside the hull's waterline so the sea
+                // reaches the sides instead of leaving a wide dry moat around the ship.
+                float opening = Mathf.Abs(z) <= 15.1f ? Mathf.Max(0, HullBeamAt(z) - .1f) : 0f;
                 waterBaseVertices.Add(new Vector3(-extent, 0, z));
                 waterBaseVertices.Add(new Vector3(-opening, 0, z));
                 waterBaseVertices.Add(new Vector3(opening, 0, z));
