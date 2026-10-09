@@ -51,6 +51,13 @@ namespace Drift
             ui.Show(screen); ui.RefreshHud();
         }
         public void CreateRoom() => Navigate(ScreenId.Room);
+        public void QuitGame()
+        {
+            Application.Quit();
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#endif
+        }
         public void SelectCharacter(CharacterId id) => SelectedCharacter = id;
         public void StartVoyage()
         {

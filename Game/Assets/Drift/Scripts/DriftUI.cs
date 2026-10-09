@@ -156,6 +156,7 @@ namespace Drift
             Button(panel, T("항해", "Voyage"), 104, 581, 590, 85, () => app.Navigate(ScreenId.Voyage));
             Button(panel, T("설정", "Settings"), 104, 681, 590, 85, app.OpenSettings);
             Button(panel, T("크레딧", "Credits"), 104, 781, 590, 85, () => app.Navigate(ScreenId.Credits));
+            Button(panel, T("게임 종료", "Quit game"), 104, 881, 590, 85, app.QuitGame);
             Label(panel, "DRIFT  /  EARLY DEVELOPMENT", 104, 972, 640, 38, 18);
             Label(pages, T("바다는 모든 것을 기억한다.", "The sea remembers."), 1140, 917, 670, 75, 33);
         }
