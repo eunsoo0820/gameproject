@@ -149,7 +149,10 @@ namespace Drift
                 waterBaseVertices.Add(new Vector3(0, 0, z));
                 waterBaseVertices.Add(new Vector3(OceanExtent, 0, z));
                 for (int point = 0; point < 4; point++)
-                    uvs.Add(new Vector2(point == 0 ? 0 : point == 1 ? .5f : point == 2 ? .5f : 1, z / 12f));
+                {
+                    float x = point == 0 ? -OceanExtent : point == 3 ? OceanExtent : 0;
+                    uvs.Add(new Vector2(x / 20f, z / 20f));
+                }
                 if (row == 0) continue;
                 int previous = (row - 1) * 4, current = row * 4;
                 triangles.Add(previous); triangles.Add(current); triangles.Add(current + 1);
