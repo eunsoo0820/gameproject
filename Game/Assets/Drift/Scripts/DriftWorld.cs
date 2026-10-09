@@ -9,11 +9,17 @@ namespace Drift
         private readonly List<Material> materials = new List<Material>();
         private readonly List<Texture2D> generatedTextures = new List<Texture2D>();
         private readonly List<Mesh> generatedMeshes = new List<Mesh>();
+        private readonly List<Vector3> waterBaseVertices = new List<Vector3>();
+        private readonly List<Vector3> waterVertices = new List<Vector3>();
         private readonly List<DriftInteractable> stations = new List<DriftInteractable>();
         private readonly List<DriftInteractable> drops = new List<DriftInteractable>();
         private readonly Material steel, rust, wood, cream, black, water, markerMaterial, teal, safetyOrange;
+        private Mesh roundedBoxMesh, waterMesh;
+        private Transform waterSurface;
         private Light daylight;
         private float flashRemaining;
+        private float waterTime;
+        private bool stormActive;
         private ParticleSystem stormRain;
         private DriftInteractable rainBarrel, fishingRod;
         public Transform Ship { get; private set; }
@@ -28,6 +34,7 @@ namespace Drift
         private readonly Vector3 deckLadderPosition = new Vector3(-2.2f, 0, -3.5f);
         private readonly Vector3 lowerLadderPosition = new Vector3(2.2f, 0, 3.2f);
         private const float MainDeckY = .85f, MiddleDeckY = -2.15f, LowerDeckY = -5.15f;
+        private const float WaterSurfaceLocalY = .4f, ShipRestY = 1.2f;
         public bool DeckHatchOpen => deckHatchOpen;
         public bool DiveHatchOpen => diveHatchOpen;
 
@@ -35,20 +42,23 @@ namespace Drift
         {
             root = new GameObject("Drift Environment").transform;
             root.SetParent(parent, false);
-            steel = MakeMaterial(template, new Color(.21f, .29f, .29f));
-            rust = MakeMaterial(template, new Color(.44f, .20f, .105f));
-            wood = MakeMaterial(template, new Color(.28f, .21f, .14f));
-            cream = MakeMaterial(template, new Color(.79f, .73f, .56f));
-            black = MakeMaterial(template, new Color(.055f, .075f, .08f));
-            teal = MakeMaterial(template, new Color(.11f, .30f, .31f));
-            safetyOrange = MakeMaterial(template, new Color(.88f, .28f, .08f));
-            water = MakeMaterial(template, new Color(.045f, .24f, .30f));
+            steel = MakeMaterial(template, new Color(.18f, .38f, .40f));
+            rust = MakeMaterial(template, new Color(.86f, .34f, .18f));
+            wood = MakeMaterial(template, new Color(.58f, .39f, .23f));
+            cream = MakeMaterial(template, new Color(.94f, .83f, .61f));
+            black = MakeMaterial(template, new Color(.075f, .12f, .15f));
+            teal = MakeMaterial(template, new Color(.12f, .48f, .48f));
+            safetyOrange = MakeMaterial(template, new Color(.98f, .38f, .16f));
+            water = MakeMaterial(template, new Color(.10f, .39f, .48f));
+            if (water.HasProperty("_Smoothness")) water.SetFloat("_Smoothness", .72f);
+            if (water.HasProperty("_Metallic")) water.SetFloat("_Metallic", .02f);
             Material amber = MakeMaterial(template, new Color(.95f, .52f, .16f));
             markerMaterial = MakeMaterial(template, Color.white);
             Ship = new GameObject("Weathered Three-Deck Vessel").transform;
             Ship.SetParent(root, false);
-            Ship.localPosition = new Vector3(0, 1.2f, 0);
-            Box("Ocean", root, new Vector3(0, .4f, 0), new Vector3(1600, .2f, 1600), water, false);
+            Ship.localPosition = new Vector3(0, ShipRestY, 0);
+            Ship.localScale = new Vector3(1.28f, 1.08f, 1.32f);
+            BuildOceanSurface();
             BuildHull();
             BuildDeckHatches(amber);
             BuildWheelhouse(amber);
@@ -92,6 +102,58 @@ namespace Drift
             RenderSettings.fog = true; RenderSettings.fogColor = new Color(.30f, .45f, .49f); RenderSettings.fogDensity = .006f;
             CombineStaticVisuals();
         }
+        private void BuildOceanSurface()
+        {
+            const float extent = 240f, step = 1f;
+            int rowCount = Mathf.RoundToInt(extent * 2f / step) + 1;
+            var uvs = new List<Vector2>(rowCount * 4);
+            var triangles = new List<int>((rowCount - 1) * 12);
+            for (int row = 0; row < rowCount; row++)
+            {
+                float z = -extent + row * step;
+                float opening = Mathf.Abs(z) <= 15.1f ? HullBeamAt(z) + .42f : 0f;
+                waterBaseVertices.Add(new Vector3(-extent, 0, z));
+                waterBaseVertices.Add(new Vector3(-opening, 0, z));
+                waterBaseVertices.Add(new Vector3(opening, 0, z));
+                waterBaseVertices.Add(new Vector3(extent, 0, z));
+                for (int point = 0; point < 4; point++)
+                    uvs.Add(new Vector2(point == 0 ? 0 : point == 1 ? .5f : point == 2 ? .5f : 1, z / 12f));
+                if (row == 0) continue;
+                int previous = (row - 1) * 4, current = row * 4;
+                triangles.Add(previous); triangles.Add(current); triangles.Add(current + 1);
+                triangles.Add(previous); triangles.Add(current + 1); triangles.Add(previous + 1);
+                triangles.Add(previous + 2); triangles.Add(current + 3); triangles.Add(previous + 3);
+                triangles.Add(previous + 2); triangles.Add(current + 2); triangles.Add(current + 3);
+            }
+            waterVertices.AddRange(waterBaseVertices);
+            waterMesh = new Mesh { name = "Wavy sea with clear hull silhouette" };
+            waterMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            waterMesh.SetVertices(waterVertices); waterMesh.SetUVs(0, uvs); waterMesh.SetTriangles(triangles, 0);
+            waterMesh.RecalculateNormals(); waterMesh.RecalculateBounds();
+            generatedMeshes.Add(waterMesh);
+            waterSurface = new GameObject("Sea surface outside hull").transform;
+            waterSurface.SetParent(root, false);
+            waterSurface.gameObject.AddComponent<MeshFilter>().sharedMesh = waterMesh;
+            var renderer = waterSurface.gameObject.AddComponent<MeshRenderer>(); renderer.sharedMaterial = water;
+            if (water.HasProperty("_Cull")) water.SetInt("_Cull", 0);
+            UpdateOceanSurface();
+        }
+        private void UpdateOceanSurface()
+        {
+            if (waterSurface == null || waterMesh == null) return;
+            waterSurface.localPosition = new Vector3(Ship.localPosition.x, WaterSurfaceLocalY, Ship.localPosition.z);
+            waterSurface.localRotation = Quaternion.Euler(0, Ship.localEulerAngles.y, 0);
+            waterSurface.localScale = new Vector3(Ship.localScale.x, 1, Ship.localScale.z);
+            float amplitude = stormActive ? .07f : .035f;
+            for (int i = 0; i < waterBaseVertices.Count; i++)
+            {
+                Vector3 point = waterBaseVertices[i];
+                point.y = (Mathf.Sin(point.z * .42f + waterTime * 1.1f) + .45f * Mathf.Sin(point.z * .83f - waterTime * .72f)) * amplitude;
+                waterVertices[i] = point;
+            }
+            waterMesh.SetVertices(waterVertices);
+            waterMesh.RecalculateNormals(); waterMesh.RecalculateBounds();
+        }
         private void BuildHull()
         {
             const float halfLength = 14.5f;
@@ -117,7 +179,7 @@ namespace Drift
                         new Vector3(side * beam * .96f, -.7f, z), new Vector3(.28f, 3.1f, segmentLength + .02f));
                     bool overlapsDiveDoor = z1 > 7.15f && z0 < 9.25f;
                     if (!(side > 0 && overlapsDiveDoor))
-                        AddHullBoundary("Lower hull boundary", new Vector3(side * beam * .7f, -3.7f, z), new Vector3(.32f, 3.1f, segmentLength + .02f));
+                        AddHullBoundary("Lower hull boundary", new Vector3(side * beam * .96f, -3.7f, z), new Vector3(.32f, 3.1f, segmentLength + .02f));
                 }
             }
             Box("Bow inner bulkhead", Ship, new Vector3(0, -2.2f, -14.1f), new Vector3(5.1f, 5.9f, .25f), rust);
@@ -239,7 +301,7 @@ namespace Drift
             generatedMeshes.Add(mesh);
             var hull = new GameObject("Sculpted tapered hull shell"); hull.transform.SetParent(Ship, false);
             hull.AddComponent<MeshFilter>().sharedMesh = mesh;
-            var renderer = hull.AddComponent<MeshRenderer>(); renderer.sharedMaterials = new[] { steel, cream, rust };
+            var renderer = hull.AddComponent<MeshRenderer>(); renderer.sharedMaterials = new[] { teal, cream, steel };
             for (int i = 0; i < renderer.sharedMaterials.Length; i++)
                 if (renderer.sharedMaterials[i].HasProperty("_Cull")) renderer.sharedMaterials[i].SetInt("_Cull", 0);
             // Deliberately leave the render shell non-colliding; invisible convex boundaries
@@ -334,8 +396,17 @@ namespace Drift
         {
             float height = upperY - lowerY;
             float middleY = (upperY + lowerY) * .5f;
+            Box(name + " mounting bulkhead", Ship, position + new Vector3(0, middleY, .17f),
+                new Vector3(1.55f, height + .38f, .22f), teal);
             Cylinder(name + " port handrail", Ship, position + new Vector3(-.38f, middleY, 0), new Vector3(.09f, height * .5f, .09f), rust);
             Cylinder(name + " starboard handrail", Ship, position + new Vector3(.38f, middleY, 0), new Vector3(.09f, height * .5f, .09f), rust);
+            for (int bracket = 0; bracket < 4; bracket++)
+            {
+                float y = Mathf.Lerp(lowerY + .2f, upperY - .2f, bracket / 3f);
+                foreach (int side in new[] { -1, 1 })
+                    Box(name + " wall anchor", Ship, position + new Vector3(side * .38f, y, .06f),
+                        new Vector3(.14f, .1f, .22f), cream, false);
+            }
             GameObject climbRail = new GameObject(name + " climb interaction");
             climbRail.transform.SetParent(Ship, false); climbRail.transform.localPosition = position + new Vector3(.38f, middleY, 0);
             climbRail.AddComponent<BoxCollider>().size = new Vector3(.3f, height, .3f);
@@ -656,13 +727,13 @@ namespace Drift
             if (station == Station.LadderDeckMiddle)
             {
                 bool descending = currentY > -.5f;
-                destination = new Vector3(deckLadderPosition.x + .95f, descending ? MiddleDeckY + .23f : MainDeckY + .25f, deckLadderPosition.z);
+                destination = new Vector3(deckLadderPosition.x + 1.4f, descending ? MiddleDeckY + .23f : MainDeckY + .25f, deckLadderPosition.z);
                 return true;
             }
             if (station == Station.LadderMiddleLower)
             {
                 bool descending = currentY > -3.5f;
-                destination = new Vector3(lowerLadderPosition.x + .95f, descending ? LowerDeckY + .23f : MiddleDeckY + .23f, lowerLadderPosition.z);
+                destination = new Vector3(lowerLadderPosition.x + 1.4f, descending ? LowerDeckY + .23f : MiddleDeckY + .23f, lowerLadderPosition.z);
                 return true;
             }
             destination = Vector3.zero;
@@ -682,24 +753,66 @@ namespace Drift
                     float fine = Mathf.PerlinNoise((x + seed * 3) * .32f, (y + seed) * .32f);
                     int hash = unchecked(x * 73856093 ^ y * 19349663 ^ seed * 83492791);
                     float speckle = (hash & 1023) / 1023f;
-                    float value = Mathf.Clamp(.76f + broad * .22f + fine * .11f + speckle * .055f, .72f, 1.13f);
-                    if (speckle > .995f) value *= .54f;
+                    float value = Mathf.Clamp(.91f + broad * .09f + fine * .03f + speckle * .02f, .88f, 1.04f);
+                    if (speckle > .998f) value *= .78f;
                     byte shade = (byte)Mathf.RoundToInt(value * 255f);
                     pixels[y * 128 + x] = new Color32(shade, shade, shade, 255);
                 }
             texture.SetPixels32(pixels); texture.Apply(false, true); generatedTextures.Add(texture);
             if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
             if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
-            if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", .22f);
-            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", .22f);
+            if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", .08f);
+            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", .32f);
             return material;
+        }
+        private Mesh GetRoundedBoxMesh()
+        {
+            if (roundedBoxMesh != null) return roundedBoxMesh;
+            var vertices = new List<Vector3>(); var normals = new List<Vector3>();
+            var uvs = new List<Vector2>(); var triangles = new List<int>();
+            AddRoundedBoxFace(vertices, normals, uvs, triangles, Vector3.forward, Vector3.right, Vector3.up);
+            AddRoundedBoxFace(vertices, normals, uvs, triangles, Vector3.back, Vector3.up, Vector3.right);
+            AddRoundedBoxFace(vertices, normals, uvs, triangles, Vector3.right, Vector3.up, Vector3.forward);
+            AddRoundedBoxFace(vertices, normals, uvs, triangles, Vector3.left, Vector3.forward, Vector3.up);
+            AddRoundedBoxFace(vertices, normals, uvs, triangles, Vector3.up, Vector3.forward, Vector3.right);
+            AddRoundedBoxFace(vertices, normals, uvs, triangles, Vector3.down, Vector3.right, Vector3.forward);
+            roundedBoxMesh = new Mesh { name = "Soft rounded game prop" };
+            roundedBoxMesh.SetVertices(vertices); roundedBoxMesh.SetNormals(normals);
+            roundedBoxMesh.SetUVs(0, uvs); roundedBoxMesh.SetTriangles(triangles, 0);
+            roundedBoxMesh.RecalculateBounds(); generatedMeshes.Add(roundedBoxMesh);
+            return roundedBoxMesh;
+        }
+        private static void AddRoundedBoxFace(List<Vector3> vertices, List<Vector3> normals,
+            List<Vector2> uvs, List<int> triangles, Vector3 face, Vector3 axisU, Vector3 axisV)
+        {
+            const int divisions = 4; const float bevel = .12f;
+            int start = vertices.Count, side = divisions + 1;
+            for (int y = 0; y <= divisions; y++)
+                for (int x = 0; x <= divisions; x++)
+                {
+                    float u = x / (float)divisions, v = y / (float)divisions;
+                    Vector3 raw = face * .5f + axisU * (u - .5f) + axisV * (v - .5f);
+                    Vector3 core = new Vector3(
+                        Mathf.Clamp(raw.x, -.5f + bevel, .5f - bevel),
+                        Mathf.Clamp(raw.y, -.5f + bevel, .5f - bevel),
+                        Mathf.Clamp(raw.z, -.5f + bevel, .5f - bevel));
+                    Vector3 delta = raw - core;
+                    Vector3 normal = delta.sqrMagnitude > .000001f ? delta.normalized : face;
+                    vertices.Add(core + normal * bevel); normals.Add(normal);
+                    uvs.Add(new Vector2(u * 3f, v * 3f));
+                    if (x == divisions || y == divisions) continue;
+                    int a = start + y * side + x, b = a + 1, d = a + side, c = d + 1;
+                    triangles.Add(a); triangles.Add(b); triangles.Add(c);
+                    triangles.Add(a); triangles.Add(c); triangles.Add(d);
+                }
         }
         private GameObject Box(string name, Transform parent, Vector3 position, Vector3 scale, Material material, bool solid = true)
         {
-            GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            obj.name = name; obj.transform.SetParent(parent, false); obj.transform.localPosition = position; obj.transform.localScale = scale;
-            obj.GetComponent<Renderer>().sharedMaterial = material;
-            if (!solid) { obj.GetComponent<Collider>().enabled = false; Object.Destroy(obj.GetComponent<Collider>()); }
+            GameObject obj = new GameObject(name);
+            obj.transform.SetParent(parent, false); obj.transform.localPosition = position; obj.transform.localScale = scale;
+            obj.AddComponent<MeshFilter>().sharedMesh = GetRoundedBoxMesh();
+            obj.AddComponent<MeshRenderer>().sharedMaterial = material;
+            if (solid) obj.AddComponent<BoxCollider>();
             return obj;
         }
         private DriftInteractable AddStation(string name, Station station, Vector3 position, Vector3 scale, Material material, Item item = Item.None, bool dropped = false)
@@ -792,10 +905,34 @@ namespace Drift
             }
         }
         public bool CanDrop => drops.Count < 64;
+        public float WaterSurfaceY => root.TransformPoint(new Vector3(0, WaterSurfaceLocalY, 0)).y;
+        public bool IsOutsideHull(Vector3 worldPosition)
+        {
+            Vector3 local = Ship.InverseTransformPoint(worldPosition);
+            float z = Mathf.Clamp(local.z, -15.1f, 15.1f);
+            bool beyondHull = local.z < -15.1f || local.z > 15.1f || Mathf.Abs(local.x) > HullBeamAt(z) + .2f;
+            bool outsideDiveDoor = diveHatchOpen && local.y < -2.8f && local.x > 4.2f && local.z > 6.6f && local.z < 10.1f;
+            return beyondHull || outsideDiveDoor;
+        }
+        public bool IsInWater(Vector3 worldPosition) => IsOutsideHull(worldPosition) && worldPosition.y < WaterSurfaceY + .35f;
+        public bool IsUnderwater(Vector3 worldPosition) => IsOutsideHull(worldPosition) && worldPosition.y < WaterSurfaceY - .05f;
+        private float WaterSurfaceShipLocalY
+        {
+            get
+            {
+                Vector3 point = Ship.position; point.y = WaterSurfaceY;
+                return Ship.InverseTransformPoint(point).y;
+            }
+        }
         public bool IsExposed(Vector3 worldPosition) => Ship.InverseTransformPoint(worldPosition).y > .3f && !InsideWheelhouse(worldPosition);
-        public void SpawnPurifierPartAtSea() => AddPickup(Item.PurifierPart, new Vector3(5.15f, -3.7f, Random.Range(8.1f, 9.0f)), true);
+        public void SpawnPurifierPartAtSea()
+        {
+            float z = Random.Range(8.1f, 9.0f);
+            AddPickup(Item.PurifierPart, new Vector3(HullBeamAt(z) + 1.2f, WaterSurfaceShipLocalY, z), true);
+        }
         public void SetStorm(bool active)
         {
+            stormActive = active;
             RenderSettings.ambientLight = active ? new Color(.18f, .23f, .27f) : new Color(.40f, .49f, .51f);
             RenderSettings.fogColor = active ? new Color(.13f, .2f, .24f) : new Color(.30f, .45f, .49f);
             if (daylight != null) daylight.intensity = active ? .38f : 1.4f;
@@ -819,7 +956,9 @@ namespace Drift
         }
         public void Reset()
         {
-            Ship.rotation = Quaternion.identity;
+            Ship.localPosition = new Vector3(0, ShipRestY, 0);
+            Ship.localRotation = Quaternion.identity;
+            UpdateOceanSurface();
             SetDeckHatchOpen(false);
             SetDiveHatchOpen(false);
             for (int i = 0; i < drops.Count; i++) if (drops[i] != null) Object.Destroy(drops[i].gameObject);
@@ -835,6 +974,12 @@ namespace Drift
         public void StartGullStrike() { gullFlight = 0; Gull.gameObject.SetActive(true); }
         public void Tick(float dt)
         {
+            waterTime += dt;
+            Vector3 shipPosition = Ship.localPosition;
+            float floatAmplitude = stormActive ? .12f : .055f;
+            shipPosition.y = ShipRestY + Mathf.Sin(waterTime * (stormActive ? 1.8f : 1.1f)) * floatAmplitude;
+            Ship.localPosition = shipPosition;
+            UpdateOceanSurface();
             if (flashRemaining > 0) { flashRemaining -= dt; if (flashRemaining <= 0 && daylight != null) daylight.intensity = .38f; }
             if (gullFlight < 0) return;
             gullFlight += dt;

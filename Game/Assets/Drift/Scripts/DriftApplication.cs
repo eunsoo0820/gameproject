@@ -118,7 +118,7 @@ namespace Drift
                 {
                     if (Settings.Pressed(Control.Inventory)) { Navigate(ScreenId.Inventory); return; }
                     if (keyboard != null && keyboard.enterKey.wasPressedThisFrame && Settings.ChatEnabled) { Navigate(ScreenId.Chat); return; }
-                    view.Tick(dt, atHelm, World.DiveHatchOpen);
+                    view.Tick(dt, atHelm, World);
                     if (atHelm)
                     {
                         float rudder = (Settings.Held(Control.Right) ? 1 : 0) - (Settings.Held(Control.Left) ? 1 : 0);
@@ -146,10 +146,7 @@ namespace Drift
                         State.Select((Mathf.Min(State.SelectedSlot, State.HotbarSlots - 1) + direction + State.HotbarSlots) % State.HotbarSlots);
                     }
                     State.Tick(dt);
-                    Vector3 playerShipPosition = view.transform.localPosition;
-                    bool underwater = playerShipPosition.y < -.7f && (Mathf.Abs(playerShipPosition.x) > 6.05f ||
-                        World.DiveHatchOpen && playerShipPosition.y < -2.8f && playerShipPosition.x > 4.2f && playerShipPosition.z > 6.6f && playerShipPosition.z < 10.1f);
-                    State.TickBreath(dt, underwater);
+                    State.TickBreath(dt, World.IsUnderwater(view.Camera.transform.position));
                     if (State.IsDead) Navigate(ScreenId.Dead);
                 }
                 fishCooldown = Mathf.Max(0, fishCooldown - dt);

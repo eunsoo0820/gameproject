@@ -42,11 +42,11 @@ namespace Drift
         public void Preview()
         {
             body.enabled = false;
-            transform.localPosition = new Vector3(-18, 10, -26);
+            transform.localPosition = new Vector3(-12, 8, -19);
             transform.LookAt(transform.parent.TransformPoint(new Vector3(0, 1.5f, 2)));
             Camera.transform.localPosition = Vector3.zero; Camera.transform.localRotation = Quaternion.identity;
         }
-        public void Tick(float dt, bool helm, bool diveHatchOpen)
+        public void Tick(float dt, bool helm, DriftWorld world)
         {
             if (Mouse.current != null)
             {
@@ -56,21 +56,22 @@ namespace Drift
                 Camera.transform.localRotation = Quaternion.Euler(pitch, 0, 0);
             }
             if (helm) return;
-            Vector3 shipPosition = transform.localPosition;
-            bool outsideDiveDoor = diveHatchOpen && shipPosition.y < -2.8f && shipPosition.x > 4.2f && shipPosition.z > 6.6f && shipPosition.z < 10.1f;
-            bool outsideHullUnderwater = shipPosition.y < -.7f && (Mathf.Abs(shipPosition.x) > 6.05f || outsideDiveDoor);
-            if (outsideHullUnderwater)
+            if (world.IsInWater(transform.position))
             {
-                body.height = 1.8f; body.center = Vector3.up * .9f;
+                body.height = 1.45f; body.center = Vector3.up * .725f;
+                Camera.transform.localPosition = Vector3.up * 1.25f;
                 Vector2 swimInput = new Vector2((settings.Held(Control.Right) ? 1 : 0) - (settings.Held(Control.Left) ? 1 : 0),
                     (settings.Held(Control.Forward) ? 1 : 0) - (settings.Held(Control.Back) ? 1 : 0));
                 swimInput = Vector2.ClampMagnitude(swimInput, 1);
                 float verticalInput = (settings.Held(Control.Jump) ? 1 : 0) - (settings.Held(Control.Crouch) ? 1 : 0);
-                Vector3 swimDirection = transform.right * swimInput.x + transform.forward * swimInput.y + Vector3.up * verticalInput;
-                float swimSpeed = (settings.Held(Control.Sprint) ? 3.4f : 2.2f) * speedMultiplier;
-                verticalSpeed = 0;
-                body.Move(swimDirection * swimSpeed * dt);
-                if (transform.position.y < -8) ResetView();
+                Vector3 swimDirection = transform.right * swimInput.x + transform.forward * swimInput.y;
+                float swimSpeed = (settings.Held(Control.Sprint) ? 3.8f : 2.6f) * speedMultiplier;
+                float floatHeight = world.WaterSurfaceY - .78f;
+                float buoyancy = Mathf.Clamp((floatHeight - transform.position.y) * 3.5f - verticalSpeed * 2.2f, -2.2f, 2.2f);
+                float targetVerticalSpeed = Mathf.Approximately(verticalInput, 0) ? buoyancy : verticalInput * 2.4f;
+                verticalSpeed = Mathf.MoveTowards(verticalSpeed, targetVerticalSpeed, 8f * dt);
+                body.Move((swimDirection * swimSpeed + Vector3.up * verticalSpeed) * dt);
+                if (transform.position.y < world.WaterSurfaceY - 30f) ResetView();
                 return;
             }
             bool crouch = settings.Held(Control.Crouch);
@@ -91,7 +92,7 @@ namespace Drift
             verticalSpeed -= 18 * dt;
             float speed = (crouch ? 1.8f : settings.Held(Control.Sprint) ? 5.4f : 3.2f) * speedMultiplier;
             body.Move(((transform.right * input.x + transform.forward * input.y) * speed + Vector3.up * verticalSpeed) * dt);
-            if (transform.position.y < -5) ResetView();
+            if (transform.position.y < world.WaterSurfaceY - 30f) ResetView();
         }
         public DriftInteractable Target()
         {
