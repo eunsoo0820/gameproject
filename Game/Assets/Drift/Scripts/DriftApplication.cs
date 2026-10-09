@@ -126,14 +126,16 @@ namespace Drift
                     if (Settings.Pressed(Control.Inventory)) { Navigate(ScreenId.Inventory); return; }
                     if (keyboard != null && keyboard.enterKey.wasPressedThisFrame && Settings.ChatEnabled) { Navigate(ScreenId.Chat); return; }
                     view.Tick(dt, atHelm, World);
+                    float rudderInput = atHelm ? (Settings.Held(Control.Right) ? 1 : 0) - (Settings.Held(Control.Left) ? 1 : 0) : 0;
+                    float throttleInput = atHelm ? (Settings.Held(Control.Forward) ? 1 : 0) - (Settings.Held(Control.Back) ? 1 : 0) : 0;
+                    World.Steer(rudderInput, throttleInput, dt);
                     if (atHelm)
                     {
-                        float rudder = (Settings.Held(Control.Right) ? 1 : 0) - (Settings.Held(Control.Left) ? 1 : 0);
                         StoryStage beforeHeading = State.Stage;
-                        World.Steer(rudder, dt); State.SetHeading(World.Heading);
+                        State.SetHeading(World.Heading);
                         if (beforeHeading == StoryStage.SteerWest && State.Stage == StoryStage.GullStrike)
                         { gullRemaining = 2; World.StartGullStrike(); ui.Toast(T("서쪽 항로를 잡았습니다. 갈매기가 갑판으로 내려옵니다.", "Westward course set. A gull is diving toward the deck.")); }
-                        ui.SetPrompt(T("조타 중  ·  ", "At helm  ·  ") + Settings.Binding(Control.Left) + " / " + Settings.Binding(Control.Right) + T(" 회전  ·  ", " turn  ·  ") + Settings.Binding(Control.Interact) + T(" 놓기", " release"));
+                        ui.SetPrompt(T("조타 중  ·  ", "At helm  ·  ") + Settings.Binding(Control.Forward) + " / " + Settings.Binding(Control.Back) + T(" 전후진  ·  ", " throttle  ·  ") + Settings.Binding(Control.Left) + " / " + Settings.Binding(Control.Right) + T(" 조향  ·  ", " steer  ·  ") + Settings.Binding(Control.Interact) + T(" 내리기", " leave helm"));
                         if (Settings.Pressed(Control.Interact)) atHelm = false;
                     }
                     else

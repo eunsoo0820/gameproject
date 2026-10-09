@@ -11,6 +11,7 @@ namespace Drift
         private readonly List<Mesh> generatedMeshes = new List<Mesh>();
         private readonly List<Vector3> waterBaseVertices = new List<Vector3>();
         private readonly List<Vector3> waterVertices = new List<Vector3>();
+        private readonly List<Vector3> hullWaterline = new List<Vector3>();
         private readonly List<DriftInteractable> stations = new List<DriftInteractable>();
         private readonly List<DriftInteractable> drops = new List<DriftInteractable>();
         private readonly Material steel, rust, wood, cream, black, water, markerMaterial, teal, safetyOrange;
@@ -19,12 +20,13 @@ namespace Drift
         private Light daylight;
         private float flashRemaining;
         private float waterTime;
+        private float shipSpeed;
         private bool stormActive;
         private ParticleSystem stormRain;
         private DriftInteractable rainBarrel, fishingRod;
         public Transform Ship { get; private set; }
         public Transform Gull { get; private set; }
-        public float Heading => Ship.eulerAngles.y;
+        public float Heading => Mathf.Repeat(Ship.eulerAngles.y + 180f, 360f);
         public IReadOnlyList<DriftInteractable> Stations => stations;
         private readonly Transform root;
         private float gullFlight = -1;
@@ -35,6 +37,7 @@ namespace Drift
         private readonly Vector3 lowerLadderPosition = new Vector3(2.2f, 0, 3.2f);
         private const float MainDeckY = .85f, MiddleDeckY = -2.15f, LowerDeckY = -5.15f;
         private const float WaterSurfaceLocalY = .4f, ShipRestY = 1.2f;
+        private const float OceanExtent = 2048f, OceanStep = 1f;
         public bool DeckHatchOpen => deckHatchOpen;
         public bool DiveHatchOpen => diveHatchOpen;
 
@@ -104,20 +107,30 @@ namespace Drift
         }
         private void BuildOceanSurface()
         {
-            const float extent = 240f, step = 1f;
-            int rowCount = Mathf.RoundToInt(extent * 2f / step) + 1;
+            const int outlineSamples = 64;
+            for (int sample = 0; sample <= outlineSamples; sample++)
+            {
+                float z = Mathf.Lerp(-15.1f, 15.1f, sample / (float)outlineSamples);
+                float beam = Mathf.Max(0, HullBeamAt(z) - .1f);
+                hullWaterline.Add(new Vector3(-beam, 0, z));
+            }
+            for (int sample = outlineSamples; sample >= 0; sample--)
+            {
+                float z = Mathf.Lerp(-15.1f, 15.1f, sample / (float)outlineSamples);
+                float beam = Mathf.Max(0, HullBeamAt(z) - .1f);
+                hullWaterline.Add(new Vector3(beam, 0, z));
+            }
+
+            int rowCount = Mathf.RoundToInt(OceanExtent * 2f / OceanStep) + 1;
             var uvs = new List<Vector2>(rowCount * 4);
             var triangles = new List<int>((rowCount - 1) * 12);
             for (int row = 0; row < rowCount; row++)
             {
-                float z = -extent + row * step;
-                // Keep the clear water opening inside the hull's waterline so the sea
-                // reaches the sides instead of leaving a wide dry moat around the ship.
-                float opening = Mathf.Abs(z) <= 15.1f ? Mathf.Max(0, HullBeamAt(z) - .1f) : 0f;
-                waterBaseVertices.Add(new Vector3(-extent, 0, z));
-                waterBaseVertices.Add(new Vector3(-opening, 0, z));
-                waterBaseVertices.Add(new Vector3(opening, 0, z));
-                waterBaseVertices.Add(new Vector3(extent, 0, z));
+                float z = -OceanExtent + row * OceanStep;
+                waterBaseVertices.Add(new Vector3(-OceanExtent, 0, z));
+                waterBaseVertices.Add(new Vector3(0, 0, z));
+                waterBaseVertices.Add(new Vector3(0, 0, z));
+                waterBaseVertices.Add(new Vector3(OceanExtent, 0, z));
                 for (int point = 0; point < 4; point++)
                     uvs.Add(new Vector2(point == 0 ? 0 : point == 1 ? .5f : point == 2 ? .5f : 1, z / 12f));
                 if (row == 0) continue;
@@ -128,12 +141,12 @@ namespace Drift
                 triangles.Add(previous + 2); triangles.Add(current + 2); triangles.Add(current + 3);
             }
             waterVertices.AddRange(waterBaseVertices);
-            waterMesh = new Mesh { name = "Wavy sea with clear hull silhouette" };
+            waterMesh = new Mesh { name = "World-anchored wavy sea with moving hull clearance" };
             waterMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             waterMesh.SetVertices(waterVertices); waterMesh.SetUVs(0, uvs); waterMesh.SetTriangles(triangles, 0);
             waterMesh.RecalculateNormals(); waterMesh.RecalculateBounds();
             generatedMeshes.Add(waterMesh);
-            waterSurface = new GameObject("Sea surface outside hull").transform;
+            waterSurface = new GameObject("World-anchored sea surface").transform;
             waterSurface.SetParent(root, false);
             waterSurface.gameObject.AddComponent<MeshFilter>().sharedMesh = waterMesh;
             var renderer = waterSurface.gameObject.AddComponent<MeshRenderer>(); renderer.sharedMaterial = water;
@@ -143,18 +156,54 @@ namespace Drift
         private void UpdateOceanSurface()
         {
             if (waterSurface == null || waterMesh == null) return;
-            waterSurface.localPosition = new Vector3(Ship.localPosition.x, WaterSurfaceLocalY, Ship.localPosition.z);
-            waterSurface.localRotation = Quaternion.Euler(0, Ship.localEulerAngles.y, 0);
-            waterSurface.localScale = new Vector3(Ship.localScale.x, 1, Ship.localScale.z);
+            waterSurface.localPosition = new Vector3(0, WaterSurfaceLocalY, 0);
+            waterSurface.localRotation = Quaternion.identity;
+            waterSurface.localScale = Vector3.one;
             float amplitude = stormActive ? .07f : .035f;
-            for (int i = 0; i < waterBaseVertices.Count; i++)
+            float shipRootZ = root.InverseTransformPoint(Ship.position).z;
+            int rowCount = waterBaseVertices.Count / 4;
+            for (int row = 0; row < rowCount; row++)
             {
-                Vector3 point = waterBaseVertices[i];
-                point.y = (Mathf.Sin(point.z * .42f + waterTime * 1.1f) + .45f * Mathf.Sin(point.z * .83f - waterTime * .72f)) * amplitude;
-                waterVertices[i] = point;
+                int vertex = row * 4;
+                float z = waterBaseVertices[vertex].z;
+                float left = 0, right = 0;
+                if (Mathf.Abs(z - shipRootZ) < 24f) FindHullWaterlineSpan(z, out left, out right);
+
+                waterVertices[vertex] = new Vector3(-OceanExtent, 0, z);
+                waterVertices[vertex + 1] = new Vector3(left, 0, z);
+                waterVertices[vertex + 2] = new Vector3(right, 0, z);
+                waterVertices[vertex + 3] = new Vector3(OceanExtent, 0, z);
+                for (int pointIndex = 0; pointIndex < 4; pointIndex++)
+                {
+                    int index = vertex + pointIndex;
+                    Vector3 point = waterVertices[index];
+                    point.y = (Mathf.Sin(point.x * .18f + point.z * .42f + waterTime * 1.1f) +
+                        .45f * Mathf.Sin(point.x * .11f + point.z * .83f - waterTime * .72f)) * amplitude;
+                    waterVertices[index] = point;
+                }
             }
             waterMesh.SetVertices(waterVertices);
             waterMesh.RecalculateNormals(); waterMesh.RecalculateBounds();
+        }
+        private void FindHullWaterlineSpan(float rootZ, out float left, out float right)
+        {
+            left = float.PositiveInfinity;
+            right = float.NegativeInfinity;
+            for (int i = 0; i < hullWaterline.Count; i++)
+            {
+                Vector3 world = Ship.TransformPoint(hullWaterline[i]);
+                Vector3 a = root.InverseTransformPoint(world);
+                Vector3 nextWorld = Ship.TransformPoint(hullWaterline[(i + 1) % hullWaterline.Count]);
+                Vector3 b = root.InverseTransformPoint(nextWorld);
+                if ((a.z <= rootZ && b.z > rootZ) || (b.z <= rootZ && a.z > rootZ))
+                {
+                    float t = (rootZ - a.z) / (b.z - a.z);
+                    float x = Mathf.Lerp(a.x, b.x, t);
+                    left = Mathf.Min(left, x);
+                    right = Mathf.Max(right, x);
+                }
+            }
+            if (float.IsInfinity(left)) left = right = 0;
         }
         private void BuildHull()
         {
@@ -958,6 +1007,7 @@ namespace Drift
         }
         public void Reset()
         {
+            shipSpeed = 0;
             Ship.localPosition = new Vector3(0, ShipRestY, 0);
             Ship.localRotation = Quaternion.identity;
             UpdateOceanSurface();
@@ -972,7 +1022,12 @@ namespace Drift
             radioWarning.SetActive(false);
             SetStorm(false);
         }
-        public void Steer(float input, float dt) => Ship.Rotate(Vector3.up, input * 22 * dt, Space.World);
+        public void Steer(float rudder, float throttle, float dt)
+        {
+            Ship.Rotate(Vector3.up, rudder * 22 * dt, Space.World);
+            shipSpeed = Mathf.MoveTowards(shipSpeed, Mathf.Clamp(throttle, -1, 1) * 4.2f, 2f * dt);
+            if (Mathf.Abs(shipSpeed) > .001f) Ship.Translate(Vector3.back * shipSpeed * dt, Space.Self);
+        }
         public void StartGullStrike() { gullFlight = 0; Gull.gameObject.SetActive(true); }
         public void Tick(float dt)
         {
