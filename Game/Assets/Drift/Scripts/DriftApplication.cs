@@ -135,7 +135,7 @@ namespace Drift
                         State.SetHeading(World.Heading);
                         if (beforeHeading == StoryStage.SteerWest && State.Stage == StoryStage.GullStrike)
                         { gullRemaining = 2; World.StartGullStrike(); ui.Toast(T("서쪽 항로를 잡았습니다. 갈매기가 갑판으로 내려옵니다.", "Westward course set. A gull is diving toward the deck.")); }
-                        ui.SetPrompt(T("조타 중  ·  ", "At helm  ·  ") + Settings.Binding(Control.Forward) + " / " + Settings.Binding(Control.Back) + T(" 전후진  ·  ", " throttle  ·  ") + Settings.Binding(Control.Left) + " / " + Settings.Binding(Control.Right) + T(" 조향  ·  ", " steer  ·  ") + Settings.Binding(Control.Interact) + T(" 내리기", " leave helm"));
+                        ui.SetPrompt(T("조타 중  ·  속도 ", "At helm  ·  speed ") + World.SpeedKnots.ToString("0.0") + T(" 노트  ·  ", " kn  ·  ") + Settings.Binding(Control.Forward) + "/" + Settings.Binding(Control.Back) + T(" 전후진  ·  ", " throttle  ·  ") + Settings.Binding(Control.Left) + "/" + Settings.Binding(Control.Right) + T(" 조향  ·  ", " steer  ·  ") + Settings.Binding(Control.Interact) + T(" 내리기", " leave helm"));
                         if (Settings.Pressed(Control.Interact)) atHelm = false;
                     }
                     else

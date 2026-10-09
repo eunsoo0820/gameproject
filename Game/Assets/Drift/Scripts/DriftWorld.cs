@@ -23,6 +23,7 @@ namespace Drift
         private float shipSpeed;
         private bool stormActive;
         private ParticleSystem stormRain;
+        private ParticleSystem shipWake;
         private DriftInteractable rainBarrel, fishingRod;
         public Transform Ship { get; private set; }
         public Transform Gull { get; private set; }
@@ -53,6 +54,21 @@ namespace Drift
             teal = MakeMaterial(template, new Color(.12f, .48f, .48f));
             safetyOrange = MakeMaterial(template, new Color(.98f, .38f, .16f));
             water = MakeMaterial(template, new Color(.10f, .39f, .48f));
+            Texture2D waterPattern = new Texture2D(128, 128, TextureFormat.RGBA32, false, true)
+            { name = "Tiled blue-green ocean ripples", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear, anisoLevel = 4 };
+            var waterPixels = new Color32[128 * 128];
+            for (int y = 0; y < 128; y++)
+                for (int x = 0; x < 128; x++)
+                {
+                    float u = x / 128f * Mathf.PI * 2f, v = y / 128f * Mathf.PI * 2f;
+                    float ripple = Mathf.Sin(v * 2f + Mathf.Sin(u) * .6f) * .5f + Mathf.Sin(v * 5f - u * 2f) * .18f;
+                    float fleck = Mathf.PerlinNoise(x * .09f, y * .09f) - .5f;
+                    Color shade = new Color(.58f, .83f, .88f) + Color.white * (ripple * .075f + fleck * .035f);
+                    waterPixels[y * 128 + x] = shade;
+                }
+            waterPattern.SetPixels32(waterPixels); waterPattern.Apply(false, true); generatedTextures.Add(waterPattern);
+            if (water.HasProperty("_BaseMap")) water.SetTexture("_BaseMap", waterPattern);
+            if (water.HasProperty("_MainTex")) water.SetTexture("_MainTex", waterPattern);
             if (water.HasProperty("_Smoothness")) water.SetFloat("_Smoothness", .72f);
             if (water.HasProperty("_Metallic")) water.SetFloat("_Metallic", .02f);
             Material amber = MakeMaterial(template, new Color(.95f, .52f, .16f));
@@ -100,6 +116,7 @@ namespace Drift
             daylight.transform.SetParent(root, false); daylight.type = LightType.Directional; daylight.intensity = 1.4f;
             daylight.transform.rotation = Quaternion.Euler(32, -28, 0); daylight.color = new Color(1, .88f, .7f);
             CreateStormRain();
+            CreateShipWake();
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
             RenderSettings.ambientLight = new Color(.40f, .49f, .51f);
             RenderSettings.fog = true; RenderSettings.fogColor = new Color(.30f, .45f, .49f); RenderSettings.fogDensity = .006f;
@@ -111,13 +128,13 @@ namespace Drift
             for (int sample = 0; sample <= outlineSamples; sample++)
             {
                 float z = Mathf.Lerp(-15.1f, 15.1f, sample / (float)outlineSamples);
-                float beam = Mathf.Max(0, HullBeamAt(z) - .1f);
+                float beam = Mathf.Max(0, HullBeamAt(z) + .35f);
                 hullWaterline.Add(new Vector3(-beam, 0, z));
             }
             for (int sample = outlineSamples; sample >= 0; sample--)
             {
                 float z = Mathf.Lerp(-15.1f, 15.1f, sample / (float)outlineSamples);
-                float beam = Mathf.Max(0, HullBeamAt(z) - .1f);
+                float beam = Mathf.Max(0, HullBeamAt(z) + .35f);
                 hullWaterline.Add(new Vector3(beam, 0, z));
             }
 
@@ -141,12 +158,12 @@ namespace Drift
                 triangles.Add(previous + 2); triangles.Add(current + 2); triangles.Add(current + 3);
             }
             waterVertices.AddRange(waterBaseVertices);
-            waterMesh = new Mesh { name = "World-anchored wavy sea with moving hull clearance" };
+            waterMesh = new Mesh { name = "World-anchored rippling sea with hull contact" };
             waterMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             waterMesh.SetVertices(waterVertices); waterMesh.SetUVs(0, uvs); waterMesh.SetTriangles(triangles, 0);
             waterMesh.RecalculateNormals(); waterMesh.RecalculateBounds();
             generatedMeshes.Add(waterMesh);
-            waterSurface = new GameObject("World-anchored sea surface").transform;
+            waterSurface = new GameObject("World-anchored rippling sea").transform;
             waterSurface.SetParent(root, false);
             waterSurface.gameObject.AddComponent<MeshFilter>().sharedMesh = waterMesh;
             var renderer = waterSurface.gameObject.AddComponent<MeshRenderer>(); renderer.sharedMaterial = water;
@@ -177,8 +194,8 @@ namespace Drift
                 {
                     int index = vertex + pointIndex;
                     Vector3 point = waterVertices[index];
-                    point.y = (Mathf.Sin(point.x * .18f + point.z * .42f + waterTime * 1.1f) +
-                        .45f * Mathf.Sin(point.x * .11f + point.z * .83f - waterTime * .72f)) * amplitude;
+                    point.y = (Mathf.Sin(point.x * .18f + point.z * .035f + waterTime * .48f) +
+                        .45f * Mathf.Sin(point.x * .11f + point.z * .075f - waterTime * .31f)) * amplitude;
                     waterVertices[index] = point;
                 }
             }
@@ -756,6 +773,29 @@ namespace Drift
             if (particleShader != null) { renderer.sharedMaterial = new Material(particleShader); materials.Add(renderer.sharedMaterial); }
             stormRain.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
+        private void CreateShipWake()
+        {
+            var wakeObject = new GameObject("Ship wake foam", typeof(ParticleSystem));
+            shipWake = wakeObject.GetComponent<ParticleSystem>();
+            var main = shipWake.main;
+            main.loop = true; main.duration = 1; main.startLifetime = 2.4f; main.startSpeed = .32f;
+            main.startSize = .28f; main.startColor = new Color(.64f, .9f, .94f, .62f);
+            main.maxParticles = 180; main.simulationSpace = ParticleSystemSimulationSpace.World;
+            var emission = shipWake.emission; emission.rateOverTime = 0;
+            var shape = shipWake.shape; shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 14; shape.radius = .55f; shape.length = 1.2f;
+            var renderer = wakeObject.GetComponent<ParticleSystemRenderer>();
+            Shader particleShader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (particleShader == null) particleShader = Shader.Find("Particles/Standard Unlit");
+            if (particleShader != null)
+            {
+                var wakeMaterial = new Material(particleShader);
+                if (wakeMaterial.HasProperty("_BaseColor")) wakeMaterial.SetColor("_BaseColor", Color.white);
+                if (wakeMaterial.HasProperty("_Color")) wakeMaterial.SetColor("_Color", Color.white);
+                renderer.sharedMaterial = wakeMaterial; materials.Add(wakeMaterial);
+            }
+            shipWake.Play();
+        }
         private DriftInteractable AddInteraction(GameObject obj, Station station)
         {
             var interaction = obj.AddComponent<DriftInteractable>();
@@ -1024,18 +1064,34 @@ namespace Drift
         }
         public void Steer(float rudder, float throttle, float dt)
         {
-            Ship.Rotate(Vector3.up, rudder * 22 * dt, Space.World);
-            shipSpeed = Mathf.MoveTowards(shipSpeed, Mathf.Clamp(throttle, -1, 1) * 4.2f, 2f * dt);
+            float targetSpeed = Mathf.Clamp(throttle, -1, 1) * 3.6f;
+            float acceleration = Mathf.Abs(targetSpeed) > Mathf.Abs(shipSpeed) ? .9f : 1.35f;
+            shipSpeed = Mathf.MoveTowards(shipSpeed, targetSpeed, acceleration * dt);
+            float steerAuthority = Mathf.Clamp01(Mathf.Abs(shipSpeed) / 1.4f);
+            Ship.Rotate(Vector3.up, rudder * 12f * steerAuthority * Mathf.Sign(shipSpeed) * dt, Space.World);
             if (Mathf.Abs(shipSpeed) > .001f) Ship.Translate(Vector3.back * shipSpeed * dt, Space.Self);
         }
+        public float SpeedKnots => Mathf.Abs(shipSpeed) * 1.94384f;
         public void StartGullStrike() { gullFlight = 0; Gull.gameObject.SetActive(true); }
         public void Tick(float dt)
         {
             waterTime += dt;
             Vector3 shipPosition = Ship.localPosition;
             float floatAmplitude = stormActive ? .12f : .055f;
-            shipPosition.y = ShipRestY + Mathf.Sin(waterTime * (stormActive ? 1.8f : 1.1f)) * floatAmplitude;
+            float waveRate = stormActive ? 1.8f : 1.1f;
+            shipPosition.y = ShipRestY + Mathf.Sin(waterTime * waveRate) * floatAmplitude;
             Ship.localPosition = shipPosition;
+            Vector3 angles = Ship.localEulerAngles;
+            float roll = Mathf.Sin(waterTime * waveRate * .72f + .8f) * (stormActive ? 2.4f : .85f);
+            float pitch = Mathf.Sin(waterTime * waveRate * .9f) * (stormActive ? 1.7f : .6f);
+            Ship.localRotation = Quaternion.Euler(pitch, angles.y, roll);
+            if (shipWake != null)
+            {
+                shipWake.transform.position = Ship.TransformPoint(new Vector3(0, WaterSurfaceShipLocalY, 15.25f));
+                shipWake.transform.rotation = Ship.rotation;
+                var emission = shipWake.emission;
+                emission.rateOverTime = Mathf.Clamp(Mathf.Abs(shipSpeed) * 3.2f, 0, 18);
+            }
             UpdateOceanSurface();
             if (flashRemaining > 0) { flashRemaining -= dt; if (flashRemaining <= 0 && daylight != null) daylight.intensity = .38f; }
             if (gullFlight < 0) return;
