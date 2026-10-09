@@ -46,7 +46,7 @@ namespace Drift
             transform.LookAt(transform.parent.TransformPoint(new Vector3(0, 1.5f, 2)));
             Camera.transform.localPosition = Vector3.zero; Camera.transform.localRotation = Quaternion.identity;
         }
-        public void Tick(float dt, bool helm)
+        public void Tick(float dt, bool helm, bool diveHatchOpen)
         {
             if (Mouse.current != null)
             {
@@ -56,7 +56,9 @@ namespace Drift
                 Camera.transform.localRotation = Quaternion.Euler(pitch, 0, 0);
             }
             if (helm) return;
-            bool outsideHullUnderwater = transform.localPosition.y < -.7f && Mathf.Abs(transform.localPosition.x) > 6.05f;
+            Vector3 shipPosition = transform.localPosition;
+            bool outsideDiveDoor = diveHatchOpen && shipPosition.y < -2.8f && shipPosition.x > 4.2f && shipPosition.z > 6.6f && shipPosition.z < 10.1f;
+            bool outsideHullUnderwater = shipPosition.y < -.7f && (Mathf.Abs(shipPosition.x) > 6.05f || outsideDiveDoor);
             if (outsideHullUnderwater)
             {
                 body.height = 1.8f; body.center = Vector3.up * .9f;

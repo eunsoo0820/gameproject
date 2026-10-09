@@ -118,7 +118,7 @@ namespace Drift
                 {
                     if (Settings.Pressed(Control.Inventory)) { Navigate(ScreenId.Inventory); return; }
                     if (keyboard != null && keyboard.enterKey.wasPressedThisFrame && Settings.ChatEnabled) { Navigate(ScreenId.Chat); return; }
-                    view.Tick(dt, atHelm);
+                    view.Tick(dt, atHelm, World.DiveHatchOpen);
                     if (atHelm)
                     {
                         float rudder = (Settings.Held(Control.Right) ? 1 : 0) - (Settings.Held(Control.Left) ? 1 : 0);
@@ -146,7 +146,9 @@ namespace Drift
                         State.Select((Mathf.Min(State.SelectedSlot, State.HotbarSlots - 1) + direction + State.HotbarSlots) % State.HotbarSlots);
                     }
                     State.Tick(dt);
-                    bool underwater = view.transform.localPosition.y < -.7f && Mathf.Abs(view.transform.localPosition.x) > 6.05f;
+                    Vector3 playerShipPosition = view.transform.localPosition;
+                    bool underwater = playerShipPosition.y < -.7f && (Mathf.Abs(playerShipPosition.x) > 6.05f ||
+                        World.DiveHatchOpen && playerShipPosition.y < -2.8f && playerShipPosition.x > 4.2f && playerShipPosition.z > 6.6f && playerShipPosition.z < 10.1f);
                     State.TickBreath(dt, underwater);
                     if (State.IsDead) Navigate(ScreenId.Dead);
                 }
@@ -256,8 +258,15 @@ namespace Drift
                     ui.Toast(World.DeckHatchOpen ? T("갑판 해치를 열었습니다.", "Deck hatch opened.") : T("갑판 해치를 닫았습니다.", "Deck hatch closed."));
                     break;
                 case Station.LadderDeckMiddle:
-                    if (!World.DeckHatchOpen && view.transform.localPosition.y > -2.1f)
-                    { ui.Toast(T("먼저 갑판 해치를 여세요.", "Open the deck hatch first.")); break; }
+                    bool descendingFromDeck = view.transform.localPosition.y > -.5f;
+                    if (!World.DeckHatchOpen && descendingFromDeck)
+                    { ui.Toast(T("갑판 해치를 먼저 열어야 내려갈 수 있습니다.", "Open the deck hatch before climbing down.")); break; }
+                    if (!descendingFromDeck && !World.DeckHatchOpen)
+                    {
+                        // A closed hatch must never trap a player in the lower decks.
+                        World.SetDeckHatchOpen(true);
+                        ui.Toast(T("아래쪽 해치를 열어 탈출 경로를 확보했습니다.", "The hatch opened from below to keep the escape route clear."));
+                    }
                     if (World.TryGetLadderDestination(target.Kind, view.transform.localPosition.y, out Vector3 middlePosition))
                         view.MoveTo(middlePosition);
                     break;
@@ -266,6 +275,10 @@ namespace Drift
                         view.MoveTo(lowerPosition);
                     break;
                 case Station.DiveHatch:
+                    Vector3 hatchPlayerPosition = view.transform.localPosition;
+                    bool closingFromSea = World.DiveHatchOpen && hatchPlayerPosition.y < -2.8f && hatchPlayerPosition.x > 4.2f && hatchPlayerPosition.z > 6.6f && hatchPlayerPosition.z < 10.1f;
+                    if (closingFromSea)
+                    { ui.Toast(T("잠수구 밖에서는 문을 잠글 수 없습니다. 먼저 선내로 들어오세요.", "Return inside before closing the dive door.")); break; }
                     World.SetDiveHatchOpen(!World.DiveHatchOpen);
                     ui.Toast(World.DiveHatchOpen ? T("잠수구 수밀문을 열었습니다.", "Dive hatch opened.") : T("잠수구 수밀문을 닫았습니다.", "Dive hatch closed."));
                     break;
@@ -294,7 +307,10 @@ namespace Drift
                 distance = Mathf.Max(.1f, obstacle.distance - .25f);
             Vector3 local = World.Ship.InverseTransformPoint(view.transform.position + direction * distance);
             local.x = Mathf.Clamp(local.x, -5.3f, 5.3f); local.z = Mathf.Clamp(local.z, -14, 14);
-            local.y = view.transform.localPosition.y > -.1f ? 1.2f : view.transform.localPosition.y > -2.1f ? -.9f : -3.05f;
+            Vector3 playerShipPosition = World.Ship.InverseTransformPoint(view.transform.position);
+            local.y = World.InsideWheelhouse(view.transform.position) ? 3.2f
+                : playerShipPosition.y > -.5f ? 1.2f
+                : playerShipPosition.y > -3.5f ? -1.92f : -4.92f;
             World.AddPickup(item, local, true);
         }
         public void SendLocalChat(string message)
