@@ -22,7 +22,9 @@ namespace Drift
         private readonly Queue<string> chat = new Queue<string>();
         private readonly StringBuilder quest = new StringBuilder(512);
         private float fadeRemaining, refreshTimer, radioRemaining, gullRemaining = -1, fishCooldown;
+        private float stormDelay, stormRemaining, stormStrikeCheck;
         private bool atHelm;
+        public CharacterId SelectedCharacter { get; private set; } = CharacterId.Charles;
         public string ChatHistory => string.Join("\n", chat);
         private string T(string ko, string en) => Settings.Text(ko, en);
 
@@ -49,11 +51,13 @@ namespace Drift
             ui.Show(screen); ui.RefreshHud();
         }
         public void CreateRoom() => Navigate(ScreenId.Room);
+        public void SelectCharacter(CharacterId id) => SelectedCharacter = id;
         public void StartVoyage()
         {
             ui.ClearNotice();
-            State = new DriftState(); World.Reset(); view.ResetView(); atHelm = false;
+            State = new DriftState(SelectedCharacter); World.Reset(); view.ResetView(); view.SetCharacterSpeed(State.Character.Speed); atHelm = false;
             fadeRemaining = 3; radioRemaining = 0; gullRemaining = -1; fishCooldown = 0; chat.Clear();
+            stormRemaining = 0; stormStrikeCheck = 0; stormDelay = Random.Range(75f, 145f);
             audioSystem.Stop(); audioSystem.StartSea(); World.RefreshMarkers(State);
             Navigate(ScreenId.Playing); ui.SetFade(1);
         }
@@ -99,7 +103,7 @@ namespace Drift
                 radioRemaining -= Time.unscaledDeltaTime;
                 if (radioRemaining <= 0)
                 {
-                    audioSystem.Disconnect(); gullRemaining = 2; World.StartGullStrike(); Navigate(ScreenId.Playing);
+                    audioSystem.Disconnect(); Navigate(ScreenId.Playing);
                 }
             }
             if (Screen == ScreenId.Inventory && Settings.Pressed(Control.Inventory)) { Navigate(ScreenId.Playing); return; }
@@ -118,7 +122,10 @@ namespace Drift
                     if (atHelm)
                     {
                         float rudder = (Settings.Held(Control.Right) ? 1 : 0) - (Settings.Held(Control.Left) ? 1 : 0);
+                        StoryStage beforeHeading = State.Stage;
                         World.Steer(rudder, dt); State.SetHeading(World.Heading);
+                        if (beforeHeading == StoryStage.SteerWest && State.Stage == StoryStage.GullStrike)
+                        { gullRemaining = 2; World.StartGullStrike(); ui.Toast(T("서쪽 항로를 잡았습니다. 갈매기가 갑판으로 내려옵니다.", "Westward course set. A gull is diving toward the deck.")); }
                         ui.SetPrompt(T("조타 중  ·  ", "At helm  ·  ") + Settings.Binding(Control.Left) + " / " + Settings.Binding(Control.Right) + T(" 회전  ·  ", " turn  ·  ") + Settings.Binding(Control.Interact) + T(" 놓기", " release"));
                         if (Settings.Pressed(Control.Interact)) atHelm = false;
                     }
@@ -131,27 +138,66 @@ namespace Drift
                     if (Settings.Pressed(Control.Drop)) DropItem();
                     if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame) UseItem();
                     if (keyboard != null)
-                        for (int i = 0; i < DriftState.HotbarCount; i++)
+                        for (int i = 0; i < State.HotbarSlots; i++)
                             if (keyboard[(Key)((int)Key.Digit1 + i)].wasPressedThisFrame) State.Select(i);
                     if (Mouse.current != null && Mouse.current.scroll.ReadValue().y != 0)
                     {
                         int direction = Mouse.current.scroll.ReadValue().y > 0 ? -1 : 1;
-                        State.Select((Mathf.Min(State.SelectedSlot, 7) + direction + 8) % 8);
+                        State.Select((Mathf.Min(State.SelectedSlot, State.HotbarSlots - 1) + direction + State.HotbarSlots) % State.HotbarSlots);
                     }
-                    State.Tick(dt); if (State.IsDead) Navigate(ScreenId.Dead);
+                    State.Tick(dt);
+                    bool underwater = view.transform.localPosition.y < -.7f && Mathf.Abs(view.transform.localPosition.x) > 6.05f;
+                    State.TickBreath(dt, underwater);
+                    if (State.IsDead) Navigate(ScreenId.Dead);
                 }
                 fishCooldown = Mathf.Max(0, fishCooldown - dt);
                 World.Tick(dt);
                 if (gullRemaining >= 0)
                 {
                     gullRemaining -= dt;
-                    if (gullRemaining <= 0) { gullRemaining = -1; State.BreakPurifier(); ui.Toast(T("갈매기가 정수기 부품을 망가뜨렸습니다!", "A seagull damaged the purifier's main part!")); }
+                    if (gullRemaining <= 0) { gullRemaining = -1; State.BreakPurifier(); ui.Toast(T("갈매기가 정수기를 망가뜨렸습니다. 바다에 떨어진 부품을 찾아야 합니다.", "The gull damaged the purifier. Find the part that fell into the sea.")); }
                 }
+                TickStorm(dt);
                 World.RefreshMarkers(State);
                 audioSystem.SetAlarm(State.Stage == StoryStage.Radio);
             }
             refreshTimer -= Time.unscaledDeltaTime;
             if (refreshTimer <= 0) { refreshTimer = .2f; ui.RefreshHud(); }
+        }
+        private void TickStorm(float dt)
+        {
+            if (stormRemaining <= 0)
+            {
+                stormDelay -= dt;
+                if (stormDelay > 0) return;
+                stormRemaining = Random.Range(75f, 125f); stormStrikeCheck = 60f;
+                stormDelay = Random.Range(210f, 360f); World.SetStorm(true);
+                ui.Toast(T("랜덤 이벤트: 천둥번개와 폭우가 시작됐습니다. 실내로 대피하세요.", "Random event: Thunderstorm. Take shelter indoors."));
+                if (State.Stage == StoryStage.FindPurifierPart && State.SpawnPurifierPart())
+                {
+                    World.SpawnPurifierPartAtSea();
+                    ui.Toast(T("폭풍 속에서 정수기 부품이 바다에 떠내려왔습니다. 잠수구로 나가 찾으세요.", "The storm washed a purifier part into the sea. Find it through the dive hatch."));
+                }
+                return;
+            }
+            stormRemaining -= dt; stormStrikeCheck -= dt;
+            if (stormStrikeCheck <= 0)
+            {
+                stormStrikeCheck += 60f;
+                if (Random.value < .4f && World.IsExposed(view.transform.position))
+                {
+                    World.FlashLightning(); State.TakeDamage(20);
+                    ui.Toast(T("번개가 갑판을 쳤습니다! 체력 -20", "Lightning struck the exposed deck! Health -20"));
+                    if (State.IsDead) Navigate(ScreenId.Dead);
+                }
+            }
+            if (stormRemaining <= 0)
+            {
+                World.SetStorm(false); State.RestoreThirst(); bool waterAdded = State.TryAdd(Item.Water);
+                ui.Toast(waterAdded
+                    ? T("폭우가 그쳤습니다. 갈증을 채우고 식수 1개를 모았습니다.", "The rain has passed. Thirst restored and one drinking water collected.")
+                    : T("폭우가 그쳤습니다. 갈증은 채웠지만 가방이 가득 차 식수는 담지 못했습니다.", "The rain has passed. Thirst restored, but the full bag could not hold the water."));
+            }
         }
         public string StationName(DriftInteractable target)
         {
@@ -165,6 +211,10 @@ namespace Drift
                 case Station.DeckRepair: return T("갑판 손상부 수리", "Repair deck");
                 case Station.Radio: return T("낡은 라디오", "Old radio");
                 case Station.Helm: return T("방향타 잡기", "Take helm");
+                case Station.DeckHatch: return World.DeckHatchOpen ? T("갑판 해치 닫기", "Close deck hatch") : T("갑판 해치 열기", "Open deck hatch");
+                case Station.LadderDeckMiddle: return T("중간층 사다리 이용", "Use ladder to middle deck");
+                case Station.LadderMiddleLower: return T("아래층 사다리 이용", "Use ladder to lower deck");
+                case Station.DiveHatch: return World.DiveHatchOpen ? T("잠수구 수밀문 닫기", "Close dive hatch") : T("잠수구 수밀문 열기", "Open dive hatch");
                 default: return Settings.ItemName(target.PickupItem) + T(" 줍기", " · pick up");
             }
         }
@@ -174,7 +224,7 @@ namespace Drift
             {
                 case Station.Note: State.ReadNote(); ui.Toast(T("오늘의 작업을 퀘스트에 등록했습니다.", "Today's work added to your objectives.")); break;
                 case Station.Pickup:
-                    if (State.TryAdd(target.PickupItem)) { ui.Toast(Settings.ItemName(target.PickupItem) + T(" 획득", " collected")); World.Collect(target); }
+                    if (State.TryAdd(target.PickupItem)) { State.AcquirePurifierPart(); ui.Toast(Settings.ItemName(target.PickupItem) + T(" 획득", " collected")); World.Collect(target); }
                     else Full(); break;
                 case Station.Fishing:
                     if (State.Count(Item.FishingRod) == 0) { ui.Toast(T("갑판의 낚싯대를 먼저 주우세요.", "Pick up the fishing rod on deck first.")); break; }
@@ -190,7 +240,7 @@ namespace Drift
                     else { State.CompleteTask(TaskId.Purifier); if (State.TryAdd(Item.Water)) ui.Toast(T("정수기가 정상입니다. 식수를 받았습니다.", "Purifier checked. Drinking water collected.")); else Full(); } break;
                 case Station.Engine:
                     if (!WorkReady(TaskId.Fuel)) break;
-                    if (State.TryRemove(Item.Fuel)) { State.CompleteTask(TaskId.Fuel); ui.Toast(T("엔진 연료 확인 완료.", "Engine refuelled and checked.")); }
+                    if (State.TryRemove(Item.Fuel)) { State.CompleteTask(TaskId.Fuel); ui.Toast(T("연료를 보충하고 엔진 시동을 걸었습니다.", "Fuelled and started the engine.")); }
                     else ui.Toast(T("엔진 옆의 연료통을 먼저 주우세요.", "Pick up the fuel container beside the engine.")); break;
                 case Station.DeckRepair:
                     if (!WorkReady(TaskId.Deck)) break;
@@ -201,6 +251,24 @@ namespace Drift
                     { radioRemaining = 5; audioSystem.Radio(); Navigate(ScreenId.Dialogue); }
                     else ui.Toast(T("무전은 조용합니다. 오늘의 작업부터 확인하세요.", "The radio is silent. Check today's work first.")); break;
                 case Station.Helm: atHelm = true; break;
+                case Station.DeckHatch:
+                    World.SetDeckHatchOpen(!World.DeckHatchOpen);
+                    ui.Toast(World.DeckHatchOpen ? T("갑판 해치를 열었습니다.", "Deck hatch opened.") : T("갑판 해치를 닫았습니다.", "Deck hatch closed."));
+                    break;
+                case Station.LadderDeckMiddle:
+                    if (!World.DeckHatchOpen && view.transform.localPosition.y > -2.1f)
+                    { ui.Toast(T("먼저 갑판 해치를 여세요.", "Open the deck hatch first.")); break; }
+                    if (World.TryGetLadderDestination(target.Kind, view.transform.localPosition.y, out Vector3 middlePosition))
+                        view.MoveTo(middlePosition);
+                    break;
+                case Station.LadderMiddleLower:
+                    if (World.TryGetLadderDestination(target.Kind, view.transform.localPosition.y, out Vector3 lowerPosition))
+                        view.MoveTo(lowerPosition);
+                    break;
+                case Station.DiveHatch:
+                    World.SetDiveHatchOpen(!World.DiveHatchOpen);
+                    ui.Toast(World.DiveHatchOpen ? T("잠수구 수밀문을 열었습니다.", "Dive hatch opened.") : T("잠수구 수밀문을 닫았습니다.", "Dive hatch closed."));
+                    break;
             }
         }
         private bool WorkReady(TaskId task)
@@ -225,7 +293,8 @@ namespace Drift
             if (Physics.Raycast(origin, direction, out var obstacle, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
                 distance = Mathf.Max(.1f, obstacle.distance - .25f);
             Vector3 local = World.Ship.InverseTransformPoint(view.transform.position + direction * distance);
-            local.x = Mathf.Clamp(local.x, -5.3f, 5.3f); local.z = Mathf.Clamp(local.z, -14, 14); local.y = 1.2f;
+            local.x = Mathf.Clamp(local.x, -5.3f, 5.3f); local.z = Mathf.Clamp(local.z, -14, 14);
+            local.y = view.transform.localPosition.y > -.1f ? 1.2f : view.transform.localPosition.y > -2.1f ? -.9f : -3.05f;
             World.AddPickup(item, local, true);
         }
         public void SendLocalChat(string message)
@@ -252,11 +321,14 @@ namespace Drift
                     case StoryStage.Radio:
                         quest.Append(T("! 경보\n조타실로 이동해 라디오를 확인하세요.\n집결: ", "! ALARM\nGather in the wheelhouse and use the radio.\nGathered: "));
                         quest.Append(World.InsideWheelhouse(view.transform.position) ? "1 / 1" : "0 / 1"); break;
-                    case StoryStage.Emergency:
-                        QuestLine(State.WestReached, T("키를 서쪽 270°로 돌리세요", "Turn the helm west, 270°"));
-                        if (State.PurifierBroken || State.PurifierRepaired) QuestLine(State.PurifierRepaired, T("정수기 수리", "Repair the purifier")); break;
+                    case StoryStage.SteerWest: quest.Append(T("나침반을 보며 키를 서쪽 270°로 돌리세요.", "Use the compass to steer west, 270°.")); break;
+                    case StoryStage.GullStrike: quest.Append(T("갈매기가 갑판으로 내려오고 있습니다.", "A gull is diving toward the deck.")); break;
+                    case StoryStage.FindPurifierPart: quest.Append(T("폭풍 이벤트를 기다린 뒤 잠수구를 통해 바다에서 정수기 부품을 찾으세요.", "Wait for a storm event, then search the sea for the purifier part through the dive hatch.")); break;
+                    case StoryStage.RepairPurifier: quest.Append(T("정수기 부품을 조타실 아래층의 정수기에 가져가 수리하세요.", "Bring the purifier part to the purifier below the wheelhouse and repair it.")); break;
                     case StoryStage.Complete: quest.Append(T("모든 작업을 완료했습니다.\n서쪽을 향한 항해가 시작됩니다.", "All tasks complete.\nYour voyage west begins.")); break;
                 }
+                if (stormRemaining > 0)
+                { quest.AppendLine(); quest.Append(T("랜덤 이벤트: 폭풍우 · 실내에서 지나가길 기다리세요.", "Random event: Storm · wait it out indoors.")); }
                 return quest.ToString();
             }
         }

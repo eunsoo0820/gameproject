@@ -7,7 +7,7 @@ using UnityEngine.InputSystem.UI;
 
 namespace Drift
 {
-    public enum ScreenId { Menu, Voyage, Room, Settings, Credits, Playing, Pause, Inventory, Chat, Dialogue, Dead }
+    public enum ScreenId { Menu, Voyage, Room, CharacterSelect, Settings, Credits, Playing, Pause, Inventory, Chat, Dialogue, Dead }
     public sealed class DriftUI
     {
         private readonly DriftApplication app;
@@ -122,7 +122,8 @@ namespace Drift
                 case ScreenId.Room:
                     var room = Page(T("출항 준비", "READY TO DEPART"), T("로컬 방 · 참가자 1명\n온라인 접속은 이후 버전에서 지원합니다.", "Local room · 1 participant\nOnline connections arrive in a later version."));
                     Label(room, T("낡은 선박, 끊어진 무전.\n오늘의 작업부터 시작하세요.", "An aging ship. A broken transmission.\nBegin with today's work."), 72, 245, 1100, 145, 34);
-                    Button(room, T("항해 시작", "Begin voyage"), 72, 450, 650, 82, app.StartVoyage); Back(room, () => app.Navigate(ScreenId.Voyage)); break;
+                    Button(room, T("캐릭터 선택", "Choose character"), 72, 450, 650, 82, () => app.Navigate(ScreenId.CharacterSelect)); Back(room, () => app.Navigate(ScreenId.Voyage)); break;
+                case ScreenId.CharacterSelect: CharacterSelectPage(); break;
                 case ScreenId.Settings: SettingsPage(); break;
                 case ScreenId.Credits:
                     var credits = Page(T("크레딧", "CREDITS"), "drift");
@@ -158,6 +159,25 @@ namespace Drift
             Label(panel, "DRIFT  /  EARLY DEVELOPMENT", 104, 972, 640, 38, 18);
             Label(pages, T("바다는 모든 것을 기억한다.", "The sea remembers."), 1140, 917, 670, 75, 33);
         }
+        private void CharacterSelectPage()
+        {
+            var panel = Page(T("선원 선택", "CHOOSE YOUR CREW"), T("캐릭터 외형은 임시로 비워두고, 명세서의 능력치만 적용합니다.", "Character art is a placeholder; listed stats come from the requirements."));
+            for (int i = 0; i < CharacterProfile.All.Length; i++)
+            {
+                var profile = CharacterProfile.All[i];
+                float x = 72 + (i % 4) * 420, y = 225 + (i / 4) * 250;
+                var button = Button(panel,
+                    profile.Name + "\n" + T("갈증 ", "Thirst ") + profile.Thirst + "   " + T("허기 ", "Hunger ") + profile.Hunger + "   " + T("체력 ", "Health ") + profile.Health +
+                    "\n" + T("가방 칸 ", "Bag ") + profile.Inventory + "   " + T("기술 ", "Skill ") + profile.Skill + "   " + T("숨 ", "Breath ") + profile.Breath + "   " + T("속도 ", "Speed ") + profile.Speed,
+                    x, y, 390, 210, () => { app.SelectCharacter(profile.Id); Show(ScreenId.CharacterSelect); });
+                var label = button.GetComponentInChildren<TMP_Text>(); label.fontSize = 21; label.textWrappingMode = TextWrappingModes.Normal;
+                label.alignment = TextAlignmentOptions.MidlineLeft;
+                if (app.SelectedCharacter == profile.Id) button.targetGraphic.color = teal;
+            }
+            Label(panel, T("능력치 선택 화면은 플레이 테스트용입니다. 캐릭터 그림과 UI는 나중에 교체할 수 있습니다.", "This is a playable selection prototype. Character art and UI can be replaced later."), 72, 760, 1500, 52, 21);
+            Button(panel, T("선택한 선원으로 출항", "Depart with selected character"), 1050, 835, 610, 75, app.StartVoyage);
+            Back(panel, () => app.Navigate(ScreenId.Room));
+        }
         private void Back(Transform parent, Action action) => Button(parent, T("뒤로", "Back"), 72, 835, 330, 70, action);
         private void SettingsPage()
         {
@@ -191,7 +211,7 @@ namespace Drift
             {
                 int slot = i; var stack = app.State.GetSlot(i);
                 Button(panel, (i + 1) + "\n" + settings.ItemName(stack.Item) + (stack.Count > 0 ? " ×" + stack.Count : ""), 72 + i % 8 * 205, 235 + i / 8 * 150, 190, 130,
-                    () => { app.State.Select(slot); Show(ScreenId.Inventory); });
+                    () => { app.State.Select(slot); Show(ScreenId.Inventory); }, i < app.State.InventorySlots);
                 if (i == app.State.SelectedSlot) pageButtons[pageButtons.Count - 1].targetGraphic.color = teal;
             }
             Button(panel, T("선택 아이템 사용", "Use selected"), 72, 720, 490, 70, () => { app.UseItem(); Show(ScreenId.Inventory); });
@@ -217,12 +237,14 @@ namespace Drift
             if (app.State == null) return;
             var state = app.State;
             objectives.text = app.QuestText;
-            vitals.text = T("갈증", "Thirst") + "  " + Mathf.CeilToInt(state.Thirst) + "%\n" + T("배고픔", "Hunger") + "  " + Mathf.CeilToInt(state.Hunger) + "%\n" + T("체력", "Health") + "  " + Mathf.CeilToInt(state.Health) + "%";
+            vitals.text = T("갈증", "Thirst") + "  " + Mathf.CeilToInt(state.Thirst / state.ThirstMax * 100) + "%\n" + T("배고픔", "Hunger") + "  " + Mathf.CeilToInt(state.Hunger / state.HungerMax * 100) + "%\n" + T("체력", "Health") + "  " + Mathf.CeilToInt(state.Health / state.HealthMax * 100) + "%";
+            if (state.Breath < state.BreathMax) vitals.text += "\n" + T("숨", "Breath") + "  " + Mathf.CeilToInt(state.Breath) + "s";
             heading.text = T("나침반", "COMPASS") + "  " + Mathf.RoundToInt(app.World.Heading).ToString("000") + "°   N 000 · E 090 · S 180 · W 270";
             for (int i = 0; i < hotbar.Length; i++)
             {
-                var stack = state.GetSlot(i); hotbar[i].text = (i + 1) + "\n" + settings.ItemName(stack.Item) + (stack.Count > 0 ? " ×" + stack.Count : "");
-                hotbarPanels[i].color = state.SelectedSlot == i ? teal : ink;
+                var stack = state.GetSlot(i); bool available = i < state.InventorySlots;
+                hotbar[i].text = available ? (i + 1) + "\n" + settings.ItemName(stack.Item) + (stack.Count > 0 ? " ×" + stack.Count : "") : "—";
+                hotbarPanels[i].color = !available ? new Color(.06f, .08f, .09f, .7f) : state.SelectedSlot == i ? teal : ink;
             }
         }
         public void SetPrompt(string text) { if (prompt.text != text) prompt.text = text; }
