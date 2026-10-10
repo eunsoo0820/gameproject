@@ -261,13 +261,6 @@ namespace Drift
             }
             Box("Bow inner bulkhead", Ship, new Vector3(0, -2.2f, -14.1f), new Vector3(5.1f, 5.9f, .25f), rust);
             Box("Stern inner bulkhead", Ship, new Vector3(0, -2.2f, 14.1f), new Vector3(5.1f, 5.9f, .25f), rust);
-            for (int i = 0; i < 15; i++)
-            {
-                float z = -14 + i * 2f;
-                float beam = HullBeamAt(z) * 1.94f;
-                Cylinder("Deck plate joint", Ship, new Vector3(0, MainDeckY + .105f, z), new Vector3(.012f, beam, .012f), black, Vector3.right);
-                Cylinder("Middle deck plate joint", Ship, new Vector3(0, MiddleDeckY + .125f, z), new Vector3(.012f, beam, .012f), black, Vector3.right);
-            }
             BuildHullPortholes();
         }
         private void BuildDeckSurface(string name, float y, float thickness, float halfLength, float beamScale,
