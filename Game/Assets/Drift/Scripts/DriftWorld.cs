@@ -17,6 +17,7 @@ namespace Drift
         private readonly Material steel, rust, wood, cream, black, water, markerMaterial, teal, safetyOrange;
         private Mesh roundedBoxMesh, waterMesh;
         private Transform waterSurface;
+        private Transform wheelhouseRoot;
         private Light daylight;
         private float flashRemaining;
         private float waterTime;
@@ -76,8 +77,12 @@ namespace Drift
             Ship = new GameObject("Weathered Three-Deck Vessel").transform;
             Ship.SetParent(root, false);
             Ship.localPosition = new Vector3(0, ShipRestY, 0);
-            // Enlarge the vessel while keeping the playable deck layout and child spacing intact.
-            Ship.localScale = new Vector3(1.85f, 1.28f, 1.68f);
+            // Scale the complete vessel while keeping gameplay positions vessel-local.
+            Ship.localScale = new Vector3(1.6f, 1.28f, 1.45f);
+            wheelhouseRoot = new GameObject("Integrated wheelhouse structure").transform;
+            wheelhouseRoot.SetParent(Ship, false);
+            wheelhouseRoot.localPosition = new Vector3(0, 0, -.4f);
+            wheelhouseRoot.localScale = new Vector3(1.25f, 1, 1.1f);
             BuildOceanSurface();
             BuildHull();
             BuildDeckHatches(amber);
@@ -89,15 +94,15 @@ namespace Drift
             BuildWheelhouseStairs();
             BuildDeckDetails();
             BuildWheelhouseConsole();
-            AddStation("Helm", Station.Helm, new Vector3(-.65f, 4.0f, .05f), new Vector3(.9f, .8f, .55f), wood);
-            AddStation("Radio", Station.Radio, new Vector3(1.45f, 3.98f, 1.25f), new Vector3(.8f, .7f, .5f), black);
+            AddStation("Helm", Station.Helm, new Vector3(-.65f, 4.0f, .05f), new Vector3(.9f, .8f, .55f), wood, parent: wheelhouseRoot);
+            AddStation("Radio", Station.Radio, new Vector3(1.45f, 3.98f, 1.25f), new Vector3(.8f, .7f, .5f), black, parent: wheelhouseRoot);
             var warning = new GameObject("Radio Warning", typeof(TextMeshPro)).GetComponent<TextMeshPro>();
-            warning.transform.SetParent(Ship, false); warning.transform.localPosition = new Vector3(1.45f, 4.55f, 1.25f);
+            warning.transform.SetParent(wheelhouseRoot, false); warning.transform.localPosition = new Vector3(1.45f, 4.55f, 1.25f);
             warning.font = font; warning.text = "!"; warning.fontSize = 6; warning.color = new Color(1, .65f, .22f);
             warning.alignment = TextAlignmentOptions.Center; warning.rectTransform.sizeDelta = new Vector2(.7f, .8f);
             radioWarning = warning.gameObject; radioWarning.SetActive(false);
-            Box("Compass", Ship, new Vector3(0, 3.76f, .52f), new Vector3(.35f, .1f, .35f), cream, false);
-            AddStation("Daily Work Note", Station.Note, new Vector3(-2.43f, 4.02f, 2.35f), new Vector3(.12f, .8f, .75f), cream);
+            Box("Compass", wheelhouseRoot, new Vector3(0, 3.76f, .52f), new Vector3(.35f, .1f, .35f), cream, false);
+            AddStation("Daily Work Note", Station.Note, new Vector3(-2.43f, 4.02f, 2.35f), new Vector3(.12f, .8f, .75f), cream, parent: wheelhouseRoot);
             rainBarrel = AddStation("Rain Barrel", Station.Barrel, new Vector3(-4, 1.5f, -6), new Vector3(.9f, 1.1f, .9f), steel);
             AddStation("Purifier", Station.Purifier, new Vector3(4, -1.45f, -5), new Vector3(1.3f, 1, .85f), cream);
             AddStation("Damaged Deck", Station.DeckRepair, new Vector3(-4, 1.02f, 0), new Vector3(1.6f, .12f, 1.5f), wood);
@@ -231,7 +236,7 @@ namespace Drift
             const float halfLength = 14.5f;
             BuildHullShell();
             BuildDeckSurface("Raised weather deck", MainDeckY, .2f, halfLength, 1f,
-                deckLadderPosition.x, deckLadderPosition.z, 1.6f, 1.85f, wood);
+                deckLadderPosition.x, deckLadderPosition.z, 1.6f, 1.85f, steel);
             BuildDeckSurface("Spacious middle deck", MiddleDeckY, .22f, halfLength, .84f,
                 lowerLadderPosition.x, lowerLadderPosition.z, 1.55f, 1.8f, steel);
             BuildDeckSurface("Spacious lower deck", LowerDeckY, .24f, halfLength, .68f, 100, 100, 0, 0, steel);
@@ -260,8 +265,8 @@ namespace Drift
             {
                 float z = -14 + i * 2f;
                 float beam = HullBeamAt(z) * 1.94f;
-                Cylinder("Deck weld seam", Ship, new Vector3(0, MainDeckY + .11f, z), new Vector3(.018f, beam, .018f), rust, Vector3.right);
-                Cylinder("Middle deck weld seam", Ship, new Vector3(0, MiddleDeckY + .13f, z), new Vector3(.018f, beam, .018f), rust, Vector3.right);
+                Cylinder("Deck plate joint", Ship, new Vector3(0, MainDeckY + .105f, z), new Vector3(.012f, beam, .012f), black, Vector3.right);
+                Cylinder("Middle deck plate joint", Ship, new Vector3(0, MiddleDeckY + .125f, z), new Vector3(.012f, beam, .012f), black, Vector3.right);
             }
             BuildHullPortholes();
         }
@@ -269,7 +274,7 @@ namespace Drift
             float holeX, float holeZ, float holeWidth, float holeLength, Material material)
         {
             var rows = new List<float>();
-            for (float z = -halfLength; z < halfLength; z += 1f) rows.Add(z);
+            for (float z = -halfLength; z < halfLength; z += 2.4f) rows.Add(z);
             rows.Add(halfLength);
             if (holeLength > 0)
             { rows.Add(holeZ - holeLength * .5f); rows.Add(holeZ + holeLength * .5f); }
@@ -452,7 +457,7 @@ namespace Drift
             deckHatchPivot = new GameObject("Deck hatch hinge").transform;
             deckHatchPivot.SetParent(Ship, false);
             deckHatchPivot.localPosition = deckHole + new Vector3(0, .03f, .92f);
-            Box("Deck hatch lid", deckHatchPivot, new Vector3(0, 0, -.92f), new Vector3(1.6f, .12f, 1.85f), rust);
+            Box("Deck hatch lid", deckHatchPivot, new Vector3(0, 0, -.92f), new Vector3(1.6f, .12f, 1.85f), steel);
             Cylinder("Hatch wheel hub", deckHatchPivot, new Vector3(0, .12f, -.92f), new Vector3(.34f, .1f, .34f), amber);
             AddStation("Deck hatch control above", Station.DeckHatch, new Vector3(-1.05f, 1.22f, -3.5f), new Vector3(.48f, .8f, .5f), amber);
             AddStation("Deck hatch release below", Station.DeckHatch, new Vector3(-1.05f, -1.45f, -3.5f), new Vector3(.48f, .8f, .5f), amber);
@@ -490,80 +495,87 @@ namespace Drift
         {
             const float centerZ = 2.35f, frontZ = -.45f, rearZ = 5.15f;
             const float floorY = 2.98f;
-            // Four structural legs and a continuous crossbeam tie the raised bridge to the deck.
-            Box("Wheelhouse deckhouse plinth", Ship, new Vector3(0, 1.85f, centerZ), new Vector3(6.15f, .28f, 6.3f), teal);
-            for (int side = -1; side <= 1; side += 2)
-                foreach (float z in new[] { -.45f, 5.15f })
-                {
-                    Cylinder("Wheelhouse load-bearing column", Ship, new Vector3(side * 2.7f, 1.96f, z), new Vector3(.34f, 1.05f, .34f), steel);
-                    Box("Column footing", Ship, new Vector3(side * 2.7f, .98f, z), new Vector3(.62f, .18f, .62f), rust);
-                }
-            Box("Bridge support crossbeam", Ship, new Vector3(0, 2.78f, centerZ), new Vector3(5.8f, .28f, 5.7f), steel);
-            Box("Wheelhouse deck floor", Ship, new Vector3(0, floorY, centerZ), new Vector3(5.35f, .2f, 5.75f), wood);
+            // A broad lower deckhouse grows from the main deck. The starboard doorway
+            // lines up with the stair landing, while both outer walkways stay clear.
+            Box("Wheelhouse foundation bow wall", wheelhouseRoot, new Vector3(0, 1.92f, frontZ), new Vector3(5.9f, 2.12f, .42f), teal);
+            Box("Wheelhouse foundation stern wall", wheelhouseRoot, new Vector3(0, 1.92f, rearZ), new Vector3(5.9f, 2.12f, .42f), teal);
+            Box("Wheelhouse foundation port wall", wheelhouseRoot, new Vector3(-2.78f, 1.92f, centerZ), new Vector3(.38f, 2.12f, 5.25f), teal);
+            Box("Wheelhouse foundation starboard forward wall", wheelhouseRoot, new Vector3(2.78f, 1.92f, 1.10f), new Vector3(.38f, 2.12f, 3.1f), teal);
+            Box("Wheelhouse foundation starboard aft wall", wheelhouseRoot, new Vector3(2.78f, 1.92f, 4.70f), new Vector3(.38f, 2.12f, .9f), teal);
+            Box("Wheelhouse deck floor", wheelhouseRoot, new Vector3(0, floorY, centerZ), new Vector3(5.55f, .2f, 5.75f), steel);
 
             // Fore windows face the vessel's bow (-Z); side panes are set between solid frames.
             for (int i = 0; i < 3; i++)
             {
-                float x = -1.75f + i * 1.75f;
-                Box("Bridge forward glass", Ship, new Vector3(x, 4.12f, frontZ + .06f), new Vector3(1.62f, 1.12f, .055f), black);
-                Box("Forward window sill", Ship, new Vector3(x, 3.52f, frontZ), new Vector3(1.7f, .12f, .22f), cream);
-                Box("Forward window mullion", Ship, new Vector3(x + .82f, 4.1f, frontZ), new Vector3(.09f, 1.2f, .16f), cream);
+                float x = -1.72f + i * 1.72f;
+                Box("Bridge forward glass", wheelhouseRoot, new Vector3(x, 4.12f, frontZ + .06f), new Vector3(1.58f, 1.12f, .055f), black);
+                Box("Forward window sill", wheelhouseRoot, new Vector3(x, 3.52f, frontZ), new Vector3(1.66f, .12f, .22f), cream);
+                Box("Forward window mullion", wheelhouseRoot, new Vector3(x + .81f, 4.1f, frontZ), new Vector3(.09f, 1.2f, .16f), cream);
             }
-            Box("Forward bridge brow", Ship, new Vector3(0, 4.74f, frontZ + .02f), new Vector3(5.5f, .16f, .3f), rust);
-            Box("Forward bridge lower panel", Ship, new Vector3(0, 3.26f, frontZ), new Vector3(5.35f, .36f, .22f), cream);
-            Box("Bridge aft wall", Ship, new Vector3(0, 4.08f, rearZ), new Vector3(5.35f, 2.05f, .2f), cream);
+            Box("Forward bridge brow", wheelhouseRoot, new Vector3(0, 4.74f, frontZ + .02f), new Vector3(6.0f, .16f, .3f), rust);
+            Box("Forward bridge lower panel", wheelhouseRoot, new Vector3(0, 3.26f, frontZ), new Vector3(5.8f, .36f, .22f), cream);
+            Box("Bridge aft wall", wheelhouseRoot, new Vector3(0, 4.08f, rearZ), new Vector3(5.8f, 2.05f, .2f), cream);
             for (int side = -1; side <= 1; side += 2)
             {
-                float x = side * 2.62f;
-                // The starboard aft opening receives the exterior stair landing.
+                float x = side * 2.82f;
+                // The starboard gap is a direct entrance from the exterior stair.
                 float[] panelCenters = side > 0 ? new[] { .42f, 1.15f, 4.9f } : new[] { .45f, 2.35f, 4.75f };
                 float[] panelLengths = side > 0 ? new[] { 1.15f, 1.2f, .9f } : new[] { 1.1f, 1.05f, 1.1f };
                 for (int i = 0; i < panelCenters.Length; i++)
                 {
                     float z = panelCenters[i], length = panelLengths[i];
-                    Box("Bridge side window glass", Ship, new Vector3(x, 4.15f, z), new Vector3(.055f, 1.02f, length), black);
-                    Box("Bridge side window sill", Ship, new Vector3(x, 3.58f, z), new Vector3(.22f, .12f, length + .12f), cream);
-                    Box("Bridge side window header", Ship, new Vector3(x, 4.72f, z), new Vector3(.22f, .12f, length + .12f), cream);
-                    Box("Bridge side window frame fore", Ship, new Vector3(x, 4.15f, z - length * .5f), new Vector3(.22f, 1.15f, .09f), cream);
-                    Box("Bridge side window frame aft", Ship, new Vector3(x, 4.15f, z + length * .5f), new Vector3(.22f, 1.15f, .09f), cream);
+                    Box("Bridge side window glass", wheelhouseRoot, new Vector3(x, 4.15f, z), new Vector3(.055f, 1.02f, length), black);
+                    Box("Bridge side window sill", wheelhouseRoot, new Vector3(x, 3.58f, z), new Vector3(.22f, .12f, length + .12f), cream);
+                    Box("Bridge side window header", wheelhouseRoot, new Vector3(x, 4.72f, z), new Vector3(.22f, .12f, length + .12f), cream);
+                    Box("Bridge side window frame fore", wheelhouseRoot, new Vector3(x, 4.15f, z - length * .5f), new Vector3(.22f, 1.15f, .09f), cream);
+                    Box("Bridge side window frame aft", wheelhouseRoot, new Vector3(x, 4.15f, z + length * .5f), new Vector3(.22f, 1.15f, .09f), cream);
                 }
-                Box("Bridge side lower belt", Ship, new Vector3(x, 3.27f, centerZ), new Vector3(.22f, .35f, 5.7f), teal);
-                Box("Bridge side upper belt", Ship, new Vector3(x, 4.98f, centerZ), new Vector3(.22f, .24f, 5.7f), cream);
+                if (side < 0)
+                    Box("Bridge side lower belt", wheelhouseRoot, new Vector3(x, 3.27f, centerZ), new Vector3(.22f, .35f, 5.7f), teal);
+                else
+                {
+                    Box("Bridge side lower belt forward", wheelhouseRoot, new Vector3(x, 3.27f, 1.25f), new Vector3(.22f, .35f, 3.3f), teal);
+                    Box("Bridge side lower belt aft", wheelhouseRoot, new Vector3(x, 3.27f, 4.75f), new Vector3(.22f, .35f, .85f), teal);
+                    Box("Wheelhouse entrance front jamb", wheelhouseRoot, new Vector3(x, 3.95f, 3.00f), new Vector3(.24f, 1.55f, .16f), cream);
+                    Box("Wheelhouse entrance rear jamb", wheelhouseRoot, new Vector3(x, 3.95f, 4.12f), new Vector3(.24f, 1.55f, .16f), cream);
+                    Box("Wheelhouse entrance header", wheelhouseRoot, new Vector3(x, 4.73f, 3.56f), new Vector3(.24f, .14f, 1.28f), cream);
+                }
+                Box("Bridge side upper belt", wheelhouseRoot, new Vector3(x, 4.98f, centerZ), new Vector3(.22f, .24f, 5.7f), cream);
             }
             // Two shallow roof planes form a visible, weathered crown rather than a floating slab.
-            var portRoof = Box("Bridge roof port slope", Ship, new Vector3(-1.35f, 5.2f, centerZ), new Vector3(2.85f, .22f, 6.2f), rust);
+            var portRoof = Box("Bridge roof port slope", wheelhouseRoot, new Vector3(-1.48f, 5.2f, centerZ), new Vector3(3.05f, .22f, 6.2f), rust);
             portRoof.transform.localRotation = Quaternion.Euler(0, 0, -5f);
-            var starboardRoof = Box("Bridge roof starboard slope", Ship, new Vector3(1.35f, 5.2f, centerZ), new Vector3(2.85f, .22f, 6.2f), rust);
+            var starboardRoof = Box("Bridge roof starboard slope", wheelhouseRoot, new Vector3(1.48f, 5.2f, centerZ), new Vector3(3.05f, .22f, 6.2f), rust);
             starboardRoof.transform.localRotation = Quaternion.Euler(0, 0, 5f);
-            Box("Roof ridge", Ship, new Vector3(0, 5.33f, centerZ), new Vector3(.12f, .12f, 6.15f), cream);
-            AddLamp(new Vector3(0, 4.8f, centerZ), amber, 6, 1.0f);
+            Box("Roof ridge", wheelhouseRoot, new Vector3(0, 5.33f, centerZ), new Vector3(.12f, .12f, 6.15f), cream);
+            AddLamp(new Vector3(0, 4.8f, centerZ), amber, 6, 1.0f, wheelhouseRoot);
         }
         private void BuildWheelhouseConsole()
         {
-            Box("Wheelhouse instrument console", Ship, new Vector3(0, 3.38f, .58f), new Vector3(4.45f, .56f, .74f), wood);
-            Box("Console brass trim", Ship, new Vector3(0, 3.68f, .58f), new Vector3(4.3f, .045f, .7f), cream, false);
+            Box("Wheelhouse instrument console", wheelhouseRoot, new Vector3(0, 3.38f, .58f), new Vector3(4.45f, .56f, .74f), wood);
+            Box("Console brass trim", wheelhouseRoot, new Vector3(0, 3.68f, .58f), new Vector3(4.3f, .045f, .7f), cream, false);
             for (int i = 0; i < 9; i++)
             {
                 float x = -1.8f + i * .45f;
-                Cylinder("Console instrument dial", Ship, new Vector3(x, 3.72f, .42f), new Vector3(.23f, .06f, .23f), black);
-                Cylinder("Dial brass bezel", Ship, new Vector3(x, 3.755f, .42f), new Vector3(.16f, .025f, .16f), cream);
+                Cylinder("Console instrument dial", wheelhouseRoot, new Vector3(x, 3.72f, .42f), new Vector3(.23f, .06f, .23f), black);
+                Cylinder("Dial brass bezel", wheelhouseRoot, new Vector3(x, 3.755f, .42f), new Vector3(.16f, .025f, .16f), cream);
             }
             // Upright helm wheel is coaxial to the ship; its dark hub remains easy to read in game.
-            Torus("Hand-fitted helm wheel", Ship, new Vector3(-.65f, 4.0f, .05f), .48f, .055f, rust, Vector3.forward);
-            Cylinder("Helm wheel hub", Ship, new Vector3(-.65f, 4.0f, .05f), new Vector3(.3f, .11f, .3f), cream, Vector3.forward);
+            Torus("Hand-fitted helm wheel", wheelhouseRoot, new Vector3(-.65f, 4.0f, .05f), .48f, .055f, rust, Vector3.forward);
+            Cylinder("Helm wheel hub", wheelhouseRoot, new Vector3(-.65f, 4.0f, .05f), new Vector3(.3f, .11f, .3f), cream, Vector3.forward);
             for (int spoke = 0; spoke < 6; spoke++)
             {
                 float a = spoke * Mathf.PI / 3f;
                 Vector3 offset = new Vector3(Mathf.Cos(a) * .34f, Mathf.Sin(a) * .34f, 0);
-                Cylinder("Helm wheel spoke", Ship, new Vector3(-.65f, 4.0f, .05f) + offset * .5f,
+                Cylinder("Helm wheel spoke", wheelhouseRoot, new Vector3(-.65f, 4.0f, .05f) + offset * .5f,
                     new Vector3(.055f, offset.magnitude, .055f), black, offset.sqrMagnitude > 0 ? offset : Vector3.right);
             }
         }
         private void BuildWheelhouseStairs()
         {
             const int steps = 14;
-            Vector3 start = new Vector3(4.55f, MainDeckY + .02f, .45f);
-            Vector3 end = new Vector3(2.85f, 2.92f, 3.65f);
+            Vector3 start = new Vector3(4.85f, MainDeckY + .02f, .45f);
+            Vector3 end = new Vector3(3.55f, 2.92f, 3.65f);
             Vector3 along = end - start; Vector3 horizontal = new Vector3(along.x, 0, along.z).normalized;
             for (int i = 0; i < steps; i++)
             {
@@ -597,11 +609,13 @@ namespace Drift
             }
             for (int side = -1; side <= 1; side += 2)
             {
-                Cylinder("Wheelhouse exhaust stack", Ship, new Vector3(side * 1.55f, 2.25f, 5.45f), new Vector3(.34f, 1.15f, .34f), black);
-                Cylinder("Exhaust stack collar", Ship, new Vector3(side * 1.55f, 3.23f, 5.45f), new Vector3(.48f, .12f, .48f), rust);
+                Cylinder("Wheelhouse exhaust stack", wheelhouseRoot, new Vector3(side * 1.55f, 5.83f, 5.45f), new Vector3(.34f, .92f, .34f), black);
+                Cylinder("Exhaust stack collar", wheelhouseRoot, new Vector3(side * 1.55f, 6.35f, 5.45f), new Vector3(.48f, .12f, .48f), rust);
             }
-            Cylinder("Wheelhouse aerial mast", Ship, new Vector3(0, 6.05f, 4.65f), new Vector3(.075f, 1.2f, .075f), steel);
-            RailRun("Aerial crossbar", new Vector3(-.7f, 6.67f, 4.65f), new Vector3(.7f, 6.67f, 4.65f), cream);
+            Cylinder("Wheelhouse aerial mast", wheelhouseRoot, new Vector3(0, 6.45f, 4.65f), new Vector3(.075f, 1.1f, .075f), steel);
+            Cylinder("Wheelhouse radar dome", wheelhouseRoot, new Vector3(-1.9f, 5.85f, 2.3f), new Vector3(1.2f, .92f, 1.2f), cream);
+            Cylinder("Wheelhouse radar base", wheelhouseRoot, new Vector3(-1.9f, 5.35f, 2.3f), new Vector3(.62f, .12f, .62f), steel);
+            RailRun("Aerial crossbar", new Vector3(-.7f, 7.02f, 4.65f), new Vector3(.7f, 7.02f, 4.65f), cream);
             BuildHullWear();
         }
         private void BuildHullWear()
@@ -667,11 +681,12 @@ namespace Drift
             AddLamp(new Vector3(-3.8f, -4.5f, -8), amber, 6, 1.0f);
             AddLamp(new Vector3(4.3f, -4.5f, 10), amber, 6, 1.0f);
         }
-        private void AddLamp(Vector3 localPosition, Material material, float range, float intensity)
+        private void AddLamp(Vector3 localPosition, Material material, float range, float intensity, Transform parent = null)
         {
-            Box("Warm utility lamp", Ship, localPosition, new Vector3(.18f, .24f, .18f), material, false);
+            Transform target = parent != null ? parent : Ship;
+            Box("Warm utility lamp", target, localPosition, new Vector3(.18f, .24f, .18f), material, false);
             var lamp = new GameObject("Utility light").AddComponent<Light>();
-            lamp.transform.SetParent(Ship, false); lamp.transform.localPosition = localPosition;
+            lamp.transform.SetParent(target, false); lamp.transform.localPosition = localPosition;
             lamp.type = LightType.Point; lamp.range = range; lamp.intensity = intensity; lamp.color = new Color(1, .72f, .42f);
         }
         private GameObject Cylinder(string name, Transform parent, Vector3 position, Vector3 size, Material material, Vector3 axis = default)
@@ -844,12 +859,9 @@ namespace Drift
             for (int y = 0; y < 128; y++)
                 for (int x = 0; x < 128; x++)
                 {
-                    float broad = Mathf.PerlinNoise((x + seed) * .075f, (y - seed) * .075f);
-                    float fine = Mathf.PerlinNoise((x + seed * 3) * .32f, (y + seed) * .32f);
-                    int hash = unchecked(x * 73856093 ^ y * 19349663 ^ seed * 83492791);
-                    float speckle = (hash & 1023) / 1023f;
-                    float value = Mathf.Clamp(.91f + broad * .09f + fine * .03f + speckle * .02f, .88f, 1.04f);
-                    if (speckle > .998f) value *= .78f;
+                    float broad = Mathf.PerlinNoise((x + seed) * .025f, (y - seed) * .025f);
+                    float fine = Mathf.PerlinNoise((x + seed * 3) * .085f, (y + seed) * .085f);
+                    float value = Mathf.Clamp(.96f + broad * .045f + fine * .012f, .94f, 1.025f);
                     byte shade = (byte)Mathf.RoundToInt(value * 255f);
                     pixels[y * 128 + x] = new Color32(shade, shade, shade, 255);
                 }
@@ -910,10 +922,10 @@ namespace Drift
             if (solid) obj.AddComponent<BoxCollider>();
             return obj;
         }
-        private DriftInteractable AddStation(string name, Station station, Vector3 position, Vector3 scale, Material material, Item item = Item.None, bool dropped = false)
+        private DriftInteractable AddStation(string name, Station station, Vector3 position, Vector3 scale, Material material, Item item = Item.None, bool dropped = false, Transform parent = null)
         {
             GameObject obj = new GameObject(name);
-            obj.transform.SetParent(Ship, false); obj.transform.localPosition = position;
+            obj.transform.SetParent(parent != null ? parent : Ship, false); obj.transform.localPosition = position;
             var hitbox = obj.AddComponent<BoxCollider>(); hitbox.size = scale;
             BuildStationVisual(obj.transform, station, scale, material, item);
             GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -1108,7 +1120,7 @@ namespace Drift
         public bool InsideWheelhouse(Vector3 position)
         {
             Vector3 local = Ship.InverseTransformPoint(position);
-            return local.y > 2.0f && Mathf.Abs(local.x) < 2.55f && local.z > -.2f && local.z < 5.0f;
+            return local.y > 2.0f && Mathf.Abs(local.x) < 3.35f && local.z > -1.0f && local.z < 5.4f;
         }
         public void RefreshMarkers(DriftState state)
         {

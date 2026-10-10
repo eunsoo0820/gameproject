@@ -21,14 +21,14 @@ namespace Drift
             body.height = 1.8f; body.center = Vector3.up * .9f; body.radius = .3f; body.stepOffset = .25f;
             Camera = new GameObject("Test View Camera").AddComponent<Camera>();
             Camera.transform.SetParent(transform, false); Camera.transform.localPosition = Vector3.up * 1.6f;
-            Camera.nearClipPlane = .06f; Camera.farClipPlane = 1000; Camera.fieldOfView = 75;
+            Camera.nearClipPlane = .06f; Camera.farClipPlane = 1000; Camera.fieldOfView = 68;
             Camera.clearFlags = CameraClearFlags.SolidColor; Camera.backgroundColor = new Color(.30f, .45f, .49f);
             Camera.gameObject.AddComponent<AudioListener>(); Camera.tag = "MainCamera";
             ResetView();
         }
         public void ResetView()
         {
-            body.enabled = false; transform.localPosition = new Vector3(0, 1.1f, -8);
+            body.enabled = false; transform.localPosition = new Vector3(0, 1.1f, -6.4f);
             body.height = 1.8f; body.center = Vector3.up * .9f;
             transform.localRotation = Quaternion.Euler(0, 180, 0); pitch = 0; verticalSpeed = 0;
             Camera.transform.localRotation = Quaternion.identity; Camera.transform.localPosition = Vector3.up * 1.6f; body.enabled = true;
