@@ -15,6 +15,8 @@ namespace Drift
         public void Initialize(Transform ship, DriftSettings configuration)
         {
             settings = configuration; transform.SetParent(ship, false);
+            Vector3 vesselScale = ship.lossyScale;
+            transform.localScale = new Vector3(1f / vesselScale.x, 1f / vesselScale.y, 1f / vesselScale.z);
             body = gameObject.AddComponent<CharacterController>();
             body.height = 1.8f; body.center = Vector3.up * .9f; body.radius = .3f; body.stepOffset = .25f;
             Camera = new GameObject("Test View Camera").AddComponent<Camera>();

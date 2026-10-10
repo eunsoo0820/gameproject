@@ -76,7 +76,8 @@ namespace Drift
             Ship = new GameObject("Weathered Three-Deck Vessel").transform;
             Ship.SetParent(root, false);
             Ship.localPosition = new Vector3(0, ShipRestY, 0);
-            Ship.localScale = new Vector3(1.28f, 1.08f, 1.32f);
+            // Enlarge the vessel while keeping the playable deck layout and child spacing intact.
+            Ship.localScale = new Vector3(1.85f, 1.28f, 1.68f);
             BuildOceanSurface();
             BuildHull();
             BuildDeckHatches(amber);
@@ -187,7 +188,7 @@ namespace Drift
                 int vertex = row * 4;
                 float z = waterBaseVertices[vertex].z;
                 float left = 0, right = 0;
-                if (Mathf.Abs(z - shipRootZ) < 24f) FindHullWaterlineSpan(z, out left, out right);
+                if (Mathf.Abs(z - shipRootZ) < 28f) FindHullWaterlineSpan(z, out left, out right);
 
                 waterVertices[vertex] = new Vector3(-OceanExtent, 0, z);
                 waterVertices[vertex + 1] = new Vector3(left, 0, z);
