@@ -240,7 +240,7 @@ namespace Drift
             BuildDeckSurface("Spacious middle deck", MiddleDeckY, .22f, halfLength, .84f,
                 lowerLadderPosition.x, lowerLadderPosition.z, 1.55f, 1.8f, steel);
             BuildDeckSurface("Spacious lower deck", LowerDeckY, .24f, halfLength, .68f, 100, 100, 0, 0, steel);
-            Box("Keel reinforcement", Ship, new Vector3(0, -5.48f, 0), new Vector3(5.6f, .38f, 25.8f), rust);
+            // The continuous hull shell encloses the lower deck; no external box keel.
 
             // Physical boundaries are separate from the sculpted visual shell. The starboard
             // lower section leaves a clear opening around the operable dive door.
@@ -259,8 +259,8 @@ namespace Drift
                         AddHullBoundary("Lower hull boundary", new Vector3(side * beam * .96f, -3.7f, z), new Vector3(.32f, 3.1f, segmentLength + .02f));
                 }
             }
-            Box("Bow inner bulkhead", Ship, new Vector3(0, -2.2f, -14.1f), new Vector3(5.1f, 5.9f, .25f), rust);
-            Box("Stern inner bulkhead", Ship, new Vector3(0, -2.2f, 14.1f), new Vector3(5.1f, 5.9f, .25f), rust);
+            Box("Bow inner bulkhead", Ship, new Vector3(0, -2.2f, -13.8f), new Vector3(3.6f, 5.9f, .25f), rust);
+            Box("Stern inner bulkhead", Ship, new Vector3(0, -2.2f, 13.8f), new Vector3(3.6f, 5.9f, .25f), rust);
             BuildHullPortholes();
         }
         private void BuildDeckSurface(string name, float y, float thickness, float halfLength, float beamScale,
@@ -276,7 +276,7 @@ namespace Drift
             {
                 float z0 = rows[i], z1 = rows[i + 1], centerZ = (z0 + z1) * .5f;
                 if (z1 - z0 < .01f) continue;
-                float beam = Mathf.Max(.5f, HullBeamAt(centerZ) * beamScale - .08f);
+                float beam = Mathf.Max(.15f, Mathf.Min(HullBeamAt(z0), HullBeamAt(z1)) * beamScale - .12f);
                 bool holeBand = holeLength > 0 && centerZ > holeZ - holeLength * .5f && centerZ < holeZ + holeLength * .5f;
                 if (holeBand)
                 {
@@ -309,10 +309,10 @@ namespace Drift
         private void BuildHullShell()
         {
             float[,] stations = {
-                { -15.1f, .4f, -2.6f, 1.03f }, { -14.0f, 2.9f, -4.4f, .93f },
-                { -11.0f, 4.9f, -5.45f, .85f }, { -6.0f, 5.7f, -5.78f, .85f },
-                { 6.0f, 5.7f, -5.78f, .85f }, { 11.0f, 4.9f, -5.45f, .85f },
-                { 14.0f, 2.9f, -4.4f, .93f }, { 15.1f, .4f, -2.6f, 1.03f }
+                { -15.1f, .4f, -6.3f, 1.03f }, { -14.0f, 2.9f, -6.3f, .93f },
+                { -11.0f, 4.9f, -6.5f, .85f }, { -6.0f, 5.7f, -6.6f, .85f },
+                { 6.0f, 5.7f, -6.6f, .85f }, { 11.0f, 4.9f, -6.5f, .85f },
+                { 14.0f, 2.9f, -6.3f, .93f }, { 15.1f, .4f, -6.3f, 1.03f }
             };
             float[] xProfile = { -1f, -.98f, -.95f, -.88f, -.68f, 0, .68f, .88f, .95f, .98f, 1f };
             float[] yProfile = { 0, .1f, .26f, .55f, .86f, 1f, .86f, .55f, .26f, .1f, 0 };
@@ -352,6 +352,17 @@ namespace Drift
                     List<int> target = y > -1.92f ? paint : y > -2.3f ? stripe : underwater;
                     target.Add(a); target.Add(b); target.Add(d); target.Add(b); target.Add(c); target.Add(d);
                 }
+            // Close both end rings so the interior cannot be seen through the bow or stern.
+            for (int end = 0; end < 2; end++)
+            {
+                int start = end == 0 ? 0 : (ringCount - 1) * ringSize;
+                for (int point = 1; point < ringSize - 1; point++)
+                {
+                    underwater.Add(start);
+                    underwater.Add(start + (end == 0 ? point + 1 : point));
+                    underwater.Add(start + (end == 0 ? point : point + 1));
+                }
+            }
             var mesh = new Mesh { name = "Tapered welded steel hull" };
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.SetVertices(vertices); mesh.SetUVs(0, uvs); mesh.subMeshCount = 3;
@@ -1151,3 +1162,4 @@ namespace Drift
         }
     }
 }
+
