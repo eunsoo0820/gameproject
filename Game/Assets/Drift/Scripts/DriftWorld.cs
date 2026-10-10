@@ -266,32 +266,59 @@ namespace Drift
         private void BuildDeckSurface(string name, float y, float thickness, float halfLength, float beamScale,
             float holeX, float holeZ, float holeWidth, float holeLength, Material material)
         {
+            // One continuous contoured surface per deck, with an actual hatch opening.
             var rows = new List<float>();
-            for (float z = -halfLength; z < halfLength; z += 2.4f) rows.Add(z);
-            rows.Add(halfLength);
-            if (holeLength > 0)
-            { rows.Add(holeZ - holeLength * .5f); rows.Add(holeZ + holeLength * .5f); }
+            for (int i = 0; i <= 128; i++) rows.Add(Mathf.Lerp(-halfLength, halfLength, i / 128f));
+            if (holeLength > 0) { rows.Add(holeZ - holeLength * .5f); rows.Add(holeZ + holeLength * .5f); }
             rows.Sort();
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            var uv = new List<Vector2>();
+            var indices = new Dictionary<Vector3, int>();
+            int Vertex(Vector3 p)
+            {
+                if (indices.TryGetValue(p, out int index)) return index;
+                index = vertices.Count; indices.Add(p, index); vertices.Add(p); uv.Add(new Vector2(p.x, p.z) * .2f); return index;
+            }
+            void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+            {
+                int ia = Vertex(a), ib = Vertex(b), ic = Vertex(c), id = Vertex(d);
+                triangles.Add(ia); triangles.Add(ib); triangles.Add(ic);
+                triangles.Add(ia); triangles.Add(ic); triangles.Add(id);
+            }
+            float top = y + thickness * .5f, bottom = y - thickness * .5f;
+            void Strip(float z0, float z1, float l0, float r0, float l1, float r1)
+            {
+                Quad(new Vector3(l0,top,z0), new Vector3(l1,top,z1), new Vector3(r1,top,z1), new Vector3(r0,top,z0));
+                Quad(new Vector3(l0,bottom,z0), new Vector3(r0,bottom,z0), new Vector3(r1,bottom,z1), new Vector3(l1,bottom,z1));
+                Quad(new Vector3(l0,bottom,z0), new Vector3(l1,bottom,z1), new Vector3(l1,top,z1), new Vector3(l0,top,z0));
+                Quad(new Vector3(r0,top,z0), new Vector3(r1,top,z1), new Vector3(r1,bottom,z1), new Vector3(r0,bottom,z0));
+            }
+            float Beam(float z) => HullBeamAt(z) * beamScale;
             for (int i = 0; i < rows.Count - 1; i++)
             {
-                float z0 = rows[i], z1 = rows[i + 1], centerZ = (z0 + z1) * .5f;
-                if (z1 - z0 < .01f) continue;
-                float beam = Mathf.Max(.15f, Mathf.Min(HullBeamAt(z0), HullBeamAt(z1)) * beamScale - .12f);
-                bool holeBand = holeLength > 0 && centerZ > holeZ - holeLength * .5f && centerZ < holeZ + holeLength * .5f;
-                if (holeBand)
+                float z0 = rows[i], z1 = rows[i+1];
+                if (z1-z0 < .0001f) continue;
+                float b0 = Beam(z0), b1 = Beam(z1), mid = (z0+z1)*.5f;
+                if (holeLength > 0 && mid > holeZ-holeLength*.5f && mid < holeZ+holeLength*.5f)
                 {
-                    float left = holeX - holeWidth * .5f, right = holeX + holeWidth * .5f;
-                    AddDeckPanel(name, y, thickness, z0, z1, (-beam + left) * .5f, left + beam, material);
-                    AddDeckPanel(name, y, thickness, z0, z1, (right + beam) * .5f, beam - right, material);
+                    Strip(z0,z1,-b0,holeX-holeWidth*.5f,-b1,holeX-holeWidth*.5f);
+                    Strip(z0,z1,holeX+holeWidth*.5f,b0,holeX+holeWidth*.5f,b1);
                 }
-                else AddDeckPanel(name, y, thickness, z0, z1, 0, beam * 2, material);
+                else Strip(z0,z1,-b0,b0,-b1,b1);
             }
-        }
-        private void AddDeckPanel(string name, float y, float thickness, float z0, float z1, float centerX, float width, Material material)
-        {
-            if (width < .15f) return;
-            Box(name + " plate", Ship, new Vector3(centerX, y, (z0 + z1) * .5f),
-                new Vector3(width, thickness, z1 - z0 + .015f), material);
+            if (holeLength > 0)
+                foreach (float z in new[] {holeZ-holeLength*.5f,holeZ+holeLength*.5f})
+                    Quad(new Vector3(holeX-holeWidth*.5f,bottom,z),new Vector3(holeX-holeWidth*.5f,top,z),new Vector3(holeX+holeWidth*.5f,top,z),new Vector3(holeX+holeWidth*.5f,bottom,z));
+            foreach (float z in new[] {-halfLength,halfLength})
+                Quad(new Vector3(-Beam(z),bottom,z),new Vector3(-Beam(z),top,z),new Vector3(Beam(z),top,z),new Vector3(Beam(z),bottom,z));
+            var mesh = new Mesh { name = name + " continuous surface" };
+            mesh.SetVertices(vertices); mesh.SetUVs(0,uv); mesh.SetTriangles(triangles,0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+            generatedMeshes.Add(mesh);
+            var deck = new GameObject(name); deck.transform.SetParent(Ship,false);
+            deck.AddComponent<MeshFilter>().sharedMesh = mesh;
+            deck.AddComponent<MeshRenderer>().sharedMaterial = material;
+            deck.AddComponent<MeshCollider>().sharedMesh = mesh;
         }
         private float HullBeamAt(float z)
         {
