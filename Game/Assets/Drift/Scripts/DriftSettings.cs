@@ -13,12 +13,14 @@ namespace Drift
         public int Volume { get; private set; }
         public bool VoiceEnabled { get; private set; }
         public bool ChatEnabled { get; private set; }
+        public bool MinaUnlocked { get; private set; }
         public DriftSettings()
         {
             Korean = PlayerPrefs.GetInt("drift.language", 0) == 0;
             Volume = Mathf.Clamp(PlayerPrefs.GetInt("drift.volume", 75), 0, 100);
             VoiceEnabled = PlayerPrefs.GetInt("drift.voice", 1) != 0;
             ChatEnabled = PlayerPrefs.GetInt("drift.chat", 1) != 0;
+            MinaUnlocked = PlayerPrefs.GetInt("drift.minaUnlocked", 0) != 0;
             bool invalid = false;
             for (int i = 0; i < keys.Length; i++)
             {
@@ -37,6 +39,14 @@ namespace Drift
         public void SetVolume(float volume) { Volume = Mathf.Clamp(Mathf.RoundToInt(volume), 0, 100); AudioListener.volume = Volume / 100f; PlayerPrefs.SetInt("drift.volume", Volume); }
         public void SetVoice(bool enabled) { VoiceEnabled = enabled; PlayerPrefs.SetInt("drift.voice", enabled ? 1 : 0); Save(); }
         public void SetChat(bool enabled) { ChatEnabled = enabled; PlayerPrefs.SetInt("drift.chat", enabled ? 1 : 0); Save(); }
+        public bool UnlockMina()
+        {
+            if (MinaUnlocked) return false;
+            MinaUnlocked = true;
+            PlayerPrefs.SetInt("drift.minaUnlocked", 1);
+            Save();
+            return true;
+        }
         public bool Rebind(Control control, Key key)
         {
             if (!IsAllowed(key)) return false;
@@ -60,6 +70,7 @@ namespace Drift
             {
                 case Item.Fish: return Text("생선", "Fish");
                 case Item.Water: return Text("식수", "Water");
+                case Item.SeaWater: return Text("바닷물", "Seawater");
                 case Item.Scrap: return Text("수리 자재", "Scrap");
                 case Item.Fuel: return Text("연료", "Fuel");
                 case Item.PurifierPart: return Text("정수기 부품", "Filter part");

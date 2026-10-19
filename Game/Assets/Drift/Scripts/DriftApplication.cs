@@ -58,7 +58,11 @@ namespace Drift
             UnityEditor.EditorApplication.isPlaying = false;
 #endif
         }
-        public void SelectCharacter(CharacterId id) => SelectedCharacter = id;
+        public void SelectCharacter(CharacterId id)
+        {
+            if (id == CharacterId.Mina && !Settings.MinaUnlocked) return;
+            SelectedCharacter = id;
+        }
         public void StartVoyage()
         {
             ui.ClearNotice();
@@ -174,11 +178,16 @@ namespace Drift
         }
         private void TickStorm(float dt)
         {
+            // Random events start only after the gull has damaged the purifier (required event 4).
+            if (State.Stage != StoryStage.FindPurifierPart
+                && State.Stage != StoryStage.RepairPurifier
+                && State.Stage != StoryStage.Complete) return;
+
             if (stormRemaining <= 0)
             {
                 stormDelay -= dt;
                 if (stormDelay > 0) return;
-                stormRemaining = Random.Range(75f, 125f); stormStrikeCheck = 60f;
+                stormRemaining = 180f; stormStrikeCheck = 10f;
                 stormDelay = Random.Range(210f, 360f); World.SetStorm(true);
                 ui.Toast(T("랜덤 이벤트: 천둥번개와 폭우가 시작됐습니다. 실내로 대피하세요.", "Random event: Thunderstorm. Take shelter indoors."));
                 if (State.Stage == StoryStage.FindPurifierPart && State.SpawnPurifierPart())
@@ -191,7 +200,7 @@ namespace Drift
             stormRemaining -= dt; stormStrikeCheck -= dt;
             if (stormStrikeCheck <= 0)
             {
-                stormStrikeCheck += 60f;
+                stormStrikeCheck += 10f;
                 if (Random.value < .4f && World.IsExposed(view.transform.position))
                 {
                     World.FlashLightning(); State.TakeDamage(20);
@@ -214,7 +223,12 @@ namespace Drift
                 case Station.Note: return T("오늘의 작업 읽기", "Read today's work");
                 case Station.Fishing: return T("낚시하기", "Fish");
                 case Station.Barrel: return T("빗물통에서 물 받기", "Collect rainwater");
-                case Station.Purifier: return State != null && State.PurifierBroken ? T("정수기 수리", "Repair purifier") : T("정수기 점검 / 식수 받기", "Inspect purifier / collect water");
+                case Station.SeaWater: return T("양동이로 바닷물 뜨기", "Fill bucket with seawater");
+                case Station.Purifier:
+                    if (State == null) return T("정수기", "Purifier");
+                    if (State.PurifierBroken) return T("정수기 수리", "Repair purifier");
+                    if (State.PurificationRemaining > 0) return T("정수 중 " + Mathf.CeilToInt(State.PurificationRemaining) + "초", "Purifying " + Mathf.CeilToInt(State.PurificationRemaining) + "s");
+                    return T("정수기 " + State.PurifierWater + "/" + DriftState.PurifierCapacity + " · 상호작용", "Purifier " + State.PurifierWater + "/" + DriftState.PurifierCapacity + " · interact");
                 case Station.Engine: return T("엔진 연료 확인 / 보충", "Check / refill engine fuel");
                 case Station.DeckRepair: return T("갑판 손상부 수리", "Repair deck");
                 case Station.Radio: return T("낡은 라디오", "Old radio");
@@ -240,12 +254,40 @@ namespace Drift
                     if (State.TryAdd(Item.Fish)) { State.CompleteTask(TaskId.Food); fishCooldown = 4; ui.Toast(T("생선을 잡았습니다. 인벤토리에서 먹을 수 있습니다.", "Fish caught. Eat it from your inventory.")); } else Full(); break;
                 case Station.Barrel:
                     if (State.TryAdd(Item.Water)) ui.Toast(T("물을 받았습니다.", "Water collected.")); else Full(); break;
+                case Station.SeaWater:
+                    if (State.TryAdd(Item.SeaWater)) ui.Toast(T("바닷물을 양동이에 담았습니다. 정수기에 넣으세요.", "Seawater collected. Bring it to the purifier.")); else Full(); break;
                 case Station.Purifier:
                     if (State.PurifierBroken)
                     {
-                        ui.Toast(State.RepairPurifier() ? T("정수기를 수리했습니다.", "Purifier repaired.") : T("정수기 부품이 필요합니다. 갑판의 흰색 상자를 찾으세요.", "A filter part is required. Find the white box on deck."));
+                        if (State.RepairPurifier())
+                        {
+                            bool minaUnlocked = Settings.UnlockMina();
+                            ui.Toast(minaUnlocked
+                                ? T("정수기를 수리했습니다. 미나가 해금되었습니다.", "Purifier repaired. Mina is unlocked.")
+                                : T("정수기를 수리했습니다.", "Purifier repaired."));
+                        }
+                        else ui.Toast(T("정수기 부품이 필요합니다. 갑판의 흰색 상자를 찾으세요.", "A filter part is required. Find the white box on deck."));
                     }
-                    else { State.CompleteTask(TaskId.Purifier); if (State.TryAdd(Item.Water)) ui.Toast(T("정수기가 정상입니다. 식수를 받았습니다.", "Purifier checked. Drinking water collected.")); else Full(); } break;
+                    else if (State.PurificationRemaining > 0)
+                        ui.Toast(T("정수 중입니다. " + Mathf.CeilToInt(State.PurificationRemaining) + "초 후 완료됩니다.", "Purification is in progress. " + Mathf.CeilToInt(State.PurificationRemaining) + " seconds remaining."));
+                    else if (State.Count(Item.SeaWater) > 0 && State.TryStartPurification())
+                    {
+                        State.CompleteTask(TaskId.Purifier);
+                        ui.Toast(T("정수를 시작했습니다. 1분 후 식수가 만들어집니다.", "Purification started. Drinking water will be ready in one minute."));
+                    }
+                    else if (State.PurifierWater > 0)
+                    {
+                        if (State.TryCollectPurifiedWater()) ui.Toast(T("정수된 물을 받았습니다. 정수기 " + State.PurifierWater + "/" + DriftState.PurifierCapacity, "Purified water collected. Purifier " + State.PurifierWater + "/" + DriftState.PurifierCapacity));
+                        else Full();
+                    }
+                    else if (State.PurifierWater >= DriftState.PurifierCapacity)
+                        ui.Toast(T("정수기 저장 용량 30개가 가득 찼습니다.", "The purifier's 30-unit storage is full."));
+                    else
+                    {
+                        State.CompleteTask(TaskId.Purifier);
+                        ui.Toast(T("정수기는 정상입니다. 먼저 갑판 양동이로 바닷물을 떠오세요.", "The purifier is working. Fill the bucket with seawater first."));
+                    }
+                    break;
                 case Station.Engine:
                     if (!WorkReady(TaskId.Fuel)) break;
                     if (State.TryRemove(Item.Fuel)) { State.CompleteTask(TaskId.Fuel); ui.Toast(T("연료를 보충하고 엔진 시동을 걸었습니다.", "Fuelled and started the engine.")); }

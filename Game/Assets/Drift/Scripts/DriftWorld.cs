@@ -25,7 +25,7 @@ namespace Drift
         private bool stormActive;
         private ParticleSystem stormRain;
         private ParticleSystem shipWake;
-        private DriftInteractable rainBarrel, fishingRod;
+        private DriftInteractable rainBarrel, seawaterBucket, fishingRod;
         public Transform Ship { get; private set; }
         public Transform Gull { get; private set; }
         public float Heading => Mathf.Repeat(Ship.eulerAngles.y + 180f, 360f);
@@ -104,6 +104,7 @@ namespace Drift
             Box("Compass", wheelhouseRoot, new Vector3(0, 3.76f, .52f), new Vector3(.35f, .1f, .35f), cream, false);
             AddStation("Daily Work Note", Station.Note, new Vector3(-2.43f, 4.02f, 2.35f), new Vector3(.12f, .8f, .75f), cream, parent: wheelhouseRoot);
             rainBarrel = AddStation("Rain Barrel", Station.Barrel, new Vector3(-4, 1.5f, -6), new Vector3(.9f, 1.1f, .9f), steel);
+            seawaterBucket = AddStation("Seawater Bucket", Station.SeaWater, new Vector3(4.05f, 1.45f, 11.5f), new Vector3(.8f, .75f, .8f), steel);
             AddStation("Purifier", Station.Purifier, new Vector3(4, -1.45f, -5), new Vector3(1.3f, 1, .85f), cream);
             AddStation("Damaged Deck", Station.DeckRepair, new Vector3(-4, 1.02f, 0), new Vector3(1.6f, .12f, 1.5f), wood);
             AddStation("Fishing Spot", Station.Fishing, new Vector3(-3.8f, 1.55f, -12.5f), new Vector3(.25f, 1, .25f), wood);
@@ -981,6 +982,11 @@ namespace Drift
                     Cylinder("Barrel top lid", parent, new Vector3(0, bounds.y * .48f, 0), new Vector3(bounds.x * .96f, .055f, bounds.z * .96f), rust);
                     for (int i = 0; i < 3; i++) Cylinder("Barrel hoop", parent, new Vector3(0, -.35f + i * .3f, 0), new Vector3(bounds.x * 1.01f, .035f, bounds.z * 1.01f), cream);
                     break;
+                case Station.SeaWater:
+                    Cylinder("Rope bucket", parent, new Vector3(0, -.05f, 0), new Vector3(bounds.x * .58f, bounds.y * .72f, bounds.z * .58f), cream);
+                    Cylinder("Bucket rim", parent, new Vector3(0, bounds.y * .32f, 0), new Vector3(bounds.x * .65f, .07f, bounds.z * .65f), rust);
+                    Cylinder("Bucket handle", parent, new Vector3(0, bounds.y * .66f, 0), new Vector3(bounds.x * .5f, .045f, .045f), steel, Vector3.forward);
+                    break;
                 case Station.Purifier:
                     Box("Purifier cabinet", parent, new Vector3(0, -.04f, 0), new Vector3(bounds.x * .78f, bounds.y * .82f, bounds.z * .76f), cream, false);
                     Cylinder("Purifier filter canister", parent, new Vector3(-.33f, -.03f, -.03f), new Vector3(.38f, bounds.y * .75f, .38f), teal);
@@ -1104,6 +1110,7 @@ namespace Drift
             drops.Clear();
             foreach (var station in stations) { station.gameObject.SetActive(true); station.ShowMarker(false); }
             rainBarrel.transform.localPosition = new Vector3(Random.Range(-4.4f, 4.4f), 1.5f, Random.Range(-12f, 12f));
+            seawaterBucket.transform.localPosition = new Vector3(Random.Range(-4.1f, 4.1f), 1.45f, Random.Range(-12f, 12f));
             fishingRod.transform.localPosition = new Vector3(Random.Range(-4.4f, 4.4f), 1.2f, Random.Range(-12f, 12f));
             gullFlight = -1; Gull.gameObject.SetActive(false);
             radioWarning.SetActive(false);

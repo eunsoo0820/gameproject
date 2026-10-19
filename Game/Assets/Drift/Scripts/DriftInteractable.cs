@@ -4,7 +4,7 @@ namespace Drift
 {
     public enum Station
     {
-        Note, Fishing, Barrel, Purifier, Engine, DeckRepair, Radio, Helm, Pickup,
+        Note, Fishing, Barrel, SeaWater, Purifier, Engine, DeckRepair, Radio, Helm, Pickup,
         DeckHatch, LadderDeckMiddle, LadderMiddleLower, DiveHatch
     }
     public sealed class DriftInteractable : MonoBehaviour

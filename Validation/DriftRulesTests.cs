@@ -40,18 +40,20 @@ internal static class DriftRulesTests
             Check(state.Count(Item.PurifierPart) == 1, "Part consumed early");
         });
         Test("West alone does not complete both objectives", () => {
-            var state = Emergency(); state.SetHeading(270); Check(state.WestReached && state.Stage == StoryStage.Emergency, "Repair bypassed");
+            var state = Emergency(); state.SetHeading(270); Check(state.WestReached && state.Stage == StoryStage.GullStrike, "Repair bypassed");
         });
         Test("West then repair completes story", () => {
             var state = Emergency(); state.SetHeading(270); state.BreakPurifier();
             Check(!state.RepairPurifier(), "Repair without part"); state.TryAdd(Item.PurifierPart);
+            state.AcquirePurifierPart();
             Check(state.RepairPurifier() && state.Stage == StoryStage.Complete, "Story did not complete");
             Check(state.Count(Item.PurifierPart) == 0 && !state.RepairPurifier(), "Part not consumed or duplicate repair");
         });
-        Test("Repair then west also completes story", () => {
-            var state = Emergency(); state.BreakPurifier(); state.TryAdd(Item.PurifierPart); state.RepairPurifier();
-            Check(state.Stage == StoryStage.Emergency, "West bypassed"); state.SetHeading(-90);
-            Check(state.Stage == StoryStage.Complete, "Negative equivalent heading failed");
+        Test("Purifier repair stays locked until west navigation and damage", () => {
+            var state = Emergency(); state.TryAdd(Item.PurifierPart); state.AcquirePurifierPart();
+            Check(!state.RepairPurifier() && state.Stage == StoryStage.SteerWest, "Repair bypassed west objective");
+            state.SetHeading(-90); state.BreakPurifier(); state.TryAdd(Item.PurifierPart); state.AcquirePurifierPart();
+            Check(state.RepairPurifier() && state.Stage == StoryStage.Complete, "West-first repair failed");
         });
         Test("East is not west and angular tolerance is bounded", () => {
             var state = Emergency(); state.SetHeading(90); state.SetHeading(278); Check(!state.WestReached, "Wrong heading accepted");
@@ -62,8 +64,8 @@ internal static class DriftRulesTests
             Check(state.GetSlot(0).Count == 20 && state.GetSlot(1).Count == 20 && state.GetSlot(2).Count == 1, "Incorrect stack split");
         });
         Test("Full inventory rejection is atomic", () => {
-            var state = new DriftState(); state.TryAdd(Item.Fish, 479);
-            Check(!state.TryAdd(Item.Fish, 2) && state.Count(Item.Fish) == 479, "Partial insertion on failure");
+            var state = new DriftState(CharacterId.Alice); state.TryAdd(Item.Fish, 199);
+            Check(!state.TryAdd(Item.Fish, 2) && state.Count(Item.Fish) == 199, "Partial insertion on failure");
             Check(state.TryAdd(Item.Fish) && !state.TryAdd(Item.Water), "Capacity boundary wrong");
         });
         Test("Insufficient removal is atomic", () => {

@@ -2,26 +2,26 @@ using System;
 
 namespace Drift
 {
-    public enum Item { None, Fish, Water, Scrap, Fuel, PurifierPart, FishingRod }
+    public enum Item { None, Fish, Water, SeaWater, Scrap, Fuel, PurifierPart, FishingRod }
     public enum TaskId { Food, Purifier, Fuel, Deck }
     public enum StoryStage { FindNote, DailyWork, Radio, SteerWest, GullStrike, FindPurifierPart, RepairPurifier, Complete }
-    public enum CharacterId { Daniel, Charles, Alice, Carl, Emma, Mina, Mason }
+    public enum CharacterId { Daniel, Charles, Alice, Carl, Emma, Mina }
 
     public sealed class CharacterProfile
     {
         public readonly CharacterId Id;
-        public readonly string Name;
+        public readonly string NameKo, NameEn;
         public readonly int Thirst, Hunger, Health, Inventory, Skill, Breath, Speed;
-        public CharacterProfile(CharacterId id, string name, int thirst, int hunger, int health, int inventory, int skill, int breath, int speed)
-        { Id = id; Name = name; Thirst = thirst; Hunger = hunger; Health = health; Inventory = inventory; Skill = skill; Breath = breath; Speed = speed; }
+        public CharacterProfile(CharacterId id, string nameKo, string nameEn, int thirst, int hunger, int health, int inventory, int skill, int breath, int speed)
+        { Id = id; NameKo = nameKo; NameEn = nameEn; Thirst = thirst; Hunger = hunger; Health = health; Inventory = inventory; Skill = skill; Breath = breath; Speed = speed; }
         public static readonly CharacterProfile[] All = {
-            new CharacterProfile(CharacterId.Daniel, "Daniel", 60, 70, 90, 7, 20, 12, 13),
-            new CharacterProfile(CharacterId.Charles, "Charles", 100, 100, 100, 5, 10, 10, 10),
-            new CharacterProfile(CharacterId.Alice, "Alice", 100, 100, 70, 10, 3, 20, 10),
-            new CharacterProfile(CharacterId.Carl, "Carl", 150, 150, 70, 5, 4, 10, 20),
-            new CharacterProfile(CharacterId.Emma, "Emma", 80, 80, 80, 7, 13, 13, 13),
-            new CharacterProfile(CharacterId.Mina, "Mina · Hardcore", 50, 50, 50, 2, 25, 5, 5),
-            new CharacterProfile(CharacterId.Mason, "Mason", 100, 150, 180, 3, 5, 8, 7)
+            new CharacterProfile(CharacterId.Daniel, "다니엘", "Daniel", 60, 70, 90, 7, 20, 12, 13),
+            new CharacterProfile(CharacterId.Charles, "찰스", "Charles", 100, 100, 100, 5, 10, 10, 10),
+            new CharacterProfile(CharacterId.Alice, "엘리스", "Alice", 100, 100, 70, 10, 3, 20, 10),
+            new CharacterProfile(CharacterId.Carl, "칼", "Carl", 150, 150, 70, 5, 4, 10, 20),
+            new CharacterProfile(CharacterId.Emma, "엠마", "Emma", 80, 80, 80, 7, 13, 13, 13),
+            new CharacterProfile(CharacterId.Mina, "미나 · 하드코어", "Mina · Hardcore", 50, 50, 50, 2, 25, 5, 5),
+
         };
         public static CharacterProfile Get(CharacterId id) => All[(int)id];
     }
@@ -34,6 +34,8 @@ namespace Drift
         public const int SlotCount = 24;
         public const int HotbarCount = 8;
         public const int StackLimit = 20;
+        public const int PurifierCapacity = 30;
+        public const float PurificationDuration = 60f;
         private readonly ItemStack[] slots = new ItemStack[SlotCount];
         private readonly bool[] tasks = new bool[4];
         public CharacterProfile Character { get; }
@@ -52,6 +54,8 @@ namespace Drift
         public bool PurifierBroken { get; private set; }
         public bool PurifierRepaired { get; private set; }
         public bool PurifierPartSpawned { get; private set; }
+        public int PurifierWater { get; private set; }
+        public float PurificationRemaining { get; private set; }
         public int SelectedSlot { get; private set; }
         public bool IsDead => Health <= 0;
         private float breathRemaining;
@@ -120,6 +124,18 @@ namespace Drift
             return true;
         }
         public void RestoreThirst() => Thirst = ThirstMax;
+        public bool TryStartPurification()
+        {
+            if (PurifierBroken || PurificationRemaining > 0 || PurifierWater >= PurifierCapacity || !TryRemove(Item.SeaWater)) return false;
+            PurificationRemaining = PurificationDuration;
+            return true;
+        }
+        public bool TryCollectPurifiedWater()
+        {
+            if (PurifierWater <= 0 || !TryAdd(Item.Water)) return false;
+            PurifierWater--;
+            return true;
+        }
         public void TakeDamage(float damage) { if (damage > 0) Health = Math.Max(0, Health - damage); }
         public void TickBreath(float seconds, bool underwater)
         {
@@ -170,6 +186,11 @@ namespace Drift
         public void Tick(float seconds)
         {
             if (seconds <= 0 || float.IsNaN(seconds) || float.IsInfinity(seconds) || IsDead) return;
+            if (!PurifierBroken && PurificationRemaining > 0)
+            {
+                PurificationRemaining = Math.Max(0, PurificationRemaining - seconds);
+                if (PurificationRemaining <= 0 && PurifierWater < PurifierCapacity) PurifierWater++;
+            }
             float hungerLoss = seconds * .035f, thirstLoss = seconds * .055f;
             float deprivationSeconds = Math.Max(0, seconds - Math.Min(Hunger / .035f, Thirst / .055f));
             Hunger = Math.Max(0, Hunger - hungerLoss); Thirst = Math.Max(0, Thirst - thirstLoss);

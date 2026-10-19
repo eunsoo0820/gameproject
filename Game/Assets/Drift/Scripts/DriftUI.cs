@@ -42,7 +42,7 @@ namespace Drift
             var questBack = Panel(hud, 38, 38, 510, 330, new Color(.025f, .06f, .07f, .75f));
             objectives = Label(questBack, "", 22, 20, 470, 290, 23);
             vitals = Label(hud, "", 1510, 880, 355, 150, 25);
-            Anchor(vitals.rectTransform, new Vector2(1, 0), new Vector2(-38, 35));
+            Anchor(vitals.rectTransform, new Vector2(0, 0), new Vector2(38, 35));
             heading = Label(hud, "", 690, 28, 540, 52, 24); heading.alignment = TextAlignmentOptions.Center;
             Anchor(heading.rectTransform, new Vector2(.5f, 1), new Vector2(0, -28));
             prompt = Label(hud, "", 555, 735, 810, 105, 25); prompt.alignment = TextAlignmentOptions.Center;
@@ -162,15 +162,16 @@ namespace Drift
         }
         private void CharacterSelectPage()
         {
-            var panel = Page(T("선원 선택", "CHOOSE YOUR CREW"), T("캐릭터 외형은 임시로 비워두고, 명세서의 능력치만 적용합니다.", "Character art is a placeholder; listed stats come from the requirements."));
+            var panel = Page(T("선원 선택", "CHOOSE YOUR CREW"), T("다섯 선원 중 선택하세요. 미나는 항해를 완료하면 해금됩니다.", "Choose from five crew members. Mina unlocks when you complete the voyage."));
             for (int i = 0; i < CharacterProfile.All.Length; i++)
             {
                 var profile = CharacterProfile.All[i];
+                bool locked = profile.Id == CharacterId.Mina && !settings.MinaUnlocked;
                 float x = 72 + (i % 4) * 420, y = 225 + (i / 4) * 250;
                 var button = Button(panel,
-                    profile.Name + "\n" + T("갈증 ", "Thirst ") + profile.Thirst + "   " + T("허기 ", "Hunger ") + profile.Hunger + "   " + T("체력 ", "Health ") + profile.Health +
+                    (locked ? T(profile.NameKo + " · 항해 중 해금", profile.NameEn + " · unlock in voyage") : T(profile.NameKo, profile.NameEn)) + "\n" + T("갈증 ", "Thirst ") + profile.Thirst + "   " + T("허기 ", "Hunger ") + profile.Hunger + "   " + T("체력 ", "Health ") + profile.Health +
                     "\n" + T("가방 칸 ", "Bag ") + profile.Inventory + "   " + T("기술 ", "Skill ") + profile.Skill + "   " + T("숨 ", "Breath ") + profile.Breath + "   " + T("속도 ", "Speed ") + profile.Speed,
-                    x, y, 390, 210, () => { app.SelectCharacter(profile.Id); Show(ScreenId.CharacterSelect); });
+                    x, y, 390, 210, () => { app.SelectCharacter(profile.Id); Show(ScreenId.CharacterSelect); }, !locked);
                 var label = button.GetComponentInChildren<TMP_Text>(); label.fontSize = 21; label.textWrappingMode = TextWrappingModes.Normal;
                 label.alignment = TextAlignmentOptions.MidlineLeft;
                 if (app.SelectedCharacter == profile.Id) button.targetGraphic.color = teal;
