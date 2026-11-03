@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: drift-rooms
+    runtime: python
+    plan: free
+    numInstances: 1
+    rootDir: Server
+    buildCommand: python -m py_compile rooms.py
+    startCommand: python rooms.py
+    healthCheckPath: /health
