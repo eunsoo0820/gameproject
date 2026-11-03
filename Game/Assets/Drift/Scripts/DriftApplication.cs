@@ -23,7 +23,8 @@ namespace Drift
         private readonly StringBuilder quest = new StringBuilder(512);
         private float fadeRemaining, refreshTimer, radioRemaining, gullRemaining = -1, fishCooldown;
         private float stormDelay, stormRemaining, stormStrikeCheck;
-        private bool atHelm;
+        private float floodEventDelay, floodEventRemaining, floodDamageTimer;
+        private bool atHelm, floodEventScheduled, floodEventActive, stormEventCompleted;
         public CharacterId SelectedCharacter { get; private set; } = CharacterId.Charles;
         public string ChatHistory => string.Join("\n", chat);
         private string T(string ko, string en) => Settings.Text(ko, en);
@@ -67,6 +68,8 @@ namespace Drift
         {
             ui.ClearNotice();
             State = new DriftState(SelectedCharacter); World.Reset(); view.ResetView(); view.SetCharacterSpeed(State.Character.Speed); atHelm = false;
+            floodEventDelay = 0; floodEventRemaining = 0; floodDamageTimer = 0;
+            floodEventScheduled = false; floodEventActive = false; stormEventCompleted = false;
             fadeRemaining = 3; radioRemaining = 0; gullRemaining = -1; fishCooldown = 0; chat.Clear();
             stormRemaining = 0; stormStrikeCheck = 0; stormDelay = Random.Range(75f, 145f);
             audioSystem.Stop(); audioSystem.StartSea(); World.RefreshMarkers(State);
@@ -76,6 +79,8 @@ namespace Drift
         {
             ui.ClearNotice();
             atHelm = false; State = null; audioSystem.Stop(); fadeRemaining = 0; radioRemaining = 0; gullRemaining = -1;
+            floodEventDelay = 0; floodEventRemaining = 0; floodDamageTimer = 0;
+            floodEventScheduled = false; floodEventActive = false; stormEventCompleted = false;
             World.Reset(); view.Preview(); ui.SetFade(0); Navigate(ScreenId.Menu);
         }
         public void OpenSettings() { settingsReturn = Screen; rebinding = null; Navigate(ScreenId.Settings); }
@@ -167,15 +172,69 @@ namespace Drift
                 if (gullRemaining >= 0)
                 {
                     gullRemaining -= dt;
-                    if (gullRemaining <= 0) { gullRemaining = -1; State.BreakPurifier(); ui.Toast(T("갈매기가 정수기를 망가뜨렸습니다. 바다에 떨어진 부품을 찾아야 합니다.", "The gull damaged the purifier. Find the part that fell into the sea.")); }
+                    if (gullRemaining <= 0)
+                    {
+                        gullRemaining = -1;
+                        State.BreakPurifier();
+                        if (State.Stage == StoryStage.FindPurifierPart)
+                        {
+                            floodEventDelay = Random.Range(45f, 90f);
+                            floodEventScheduled = true;
+                        }
+                        ui.Toast(T("갈매기가 정수기를 망가뜨렸습니다. 바다에 떨어진 부품을 찾아야 합니다.", "The gull damaged the purifier. Find the part that fell into the sea."));
+                    }
                 }
                 TickStorm(dt);
-                World.RefreshMarkers(State);
+                TickFloodEvent(dt);
+                World.RefreshMarkers(State, floodEventActive);
                 audioSystem.SetAlarm(State.Stage == StoryStage.Radio);
             }
             refreshTimer -= Time.unscaledDeltaTime;
             if (refreshTimer <= 0) { refreshTimer = .2f; ui.RefreshHud(); }
         }
+        private void TickFloodEvent(float dt)
+        {
+            if (State.Stage != StoryStage.FindPurifierPart
+                && State.Stage != StoryStage.RepairPurifier
+                && State.Stage != StoryStage.Complete) return;
+            if (stormRemaining > 0) return;
+            if (floodEventScheduled)
+            {
+                if (!stormEventCompleted) return;
+                floodEventDelay -= dt;
+                if (floodEventDelay > 0) return;
+                floodEventScheduled = false;
+                floodEventActive = true;
+                floodEventRemaining = 180f;
+                floodDamageTimer = 10f;
+                World.SetDiveHatchOpen(true);
+                ui.Toast(T("랜덤 이벤트: 잠수구 수밀문이 고장 났습니다. 3분 안에 닫으세요.", "Random event: The dive hatch failed. Close it within 3 minutes."));
+            }
+            if (!floodEventActive) return;
+
+            floodEventRemaining -= dt;
+            floodDamageTimer -= dt;
+            if (floodDamageTimer <= 0)
+            {
+                floodDamageTimer = 10f;
+                State.TakeDamage(2f);
+                ui.Toast(T("물이 선내로 들어옵니다. 체력 -2 · 잠수구 수밀문을 닫으세요.", "Water is flooding the ship. Health -2 · Close the dive hatch."));
+                if (State.IsDead)
+                {
+                    Navigate(ScreenId.Dead);
+                    return;
+                }
+            }
+            if (floodEventRemaining <= 0)
+            {
+                floodEventActive = false;
+                World.SetDiveHatchOpen(false);
+                State.TakeDamage(15f);
+                ui.Toast(T("시간 안에 수밀문을 닫지 못했습니다. 침수로 체력 -15", "The hatch was not closed in time. Flooding caused 15 damage."));
+                if (State.IsDead) Navigate(ScreenId.Dead);
+            }
+        }
+
         private void TickStorm(float dt)
         {
             // Random events start only after the gull has damaged the purifier (required event 4).
@@ -210,10 +269,8 @@ namespace Drift
             }
             if (stormRemaining <= 0)
             {
-                World.SetStorm(false); State.RestoreThirst(); bool waterAdded = State.TryAdd(Item.Water);
-                ui.Toast(waterAdded
-                    ? T("폭우가 그쳤습니다. 갈증을 채우고 식수 1개를 모았습니다.", "The rain has passed. Thirst restored and one drinking water collected.")
-                    : T("폭우가 그쳤습니다. 갈증은 채웠지만 가방이 가득 차 식수는 담지 못했습니다.", "The rain has passed. Thirst restored, but the full bag could not hold the water."));
+                World.SetStorm(false); stormEventCompleted = true; State.RestoreThirst(); State.FillPurifierTank();
+                ui.Toast(T("폭우가 그쳤습니다. 갈증과 정수기 물이 최대치로 회복되었습니다.", "The rain has passed. Thirst and purifier water are full."));
             }
         }
         public string StationName(DriftInteractable target)
@@ -246,7 +303,12 @@ namespace Drift
             {
                 case Station.Note: State.ReadNote(); ui.Toast(T("오늘의 작업을 퀘스트에 등록했습니다.", "Today's work added to your objectives.")); break;
                 case Station.Pickup:
-                    if (State.TryAdd(target.PickupItem)) { State.AcquirePurifierPart(); ui.Toast(Settings.ItemName(target.PickupItem) + T(" 획득", " collected")); World.Collect(target); }
+                    if (State.TryAdd(target.PickupItem))
+                    {
+                        State.AcquirePurifierPart();
+                        ui.Toast(Settings.ItemName(target.PickupItem) + T(" 획득", " collected"));
+                        World.Collect(target);
+                    }
                     else Full(); break;
                 case Station.Fishing:
                     if (State.Count(Item.FishingRod) == 0) { ui.Toast(T("갑판의 낚싯대를 먼저 주우세요.", "Pick up the fishing rod on deck first.")); break; }
@@ -327,8 +389,19 @@ namespace Drift
                     bool closingFromSea = World.DiveHatchOpen && hatchPlayerPosition.y < -2.8f && hatchPlayerPosition.x > 4.2f && hatchPlayerPosition.z > 6.6f && hatchPlayerPosition.z < 10.1f;
                     if (closingFromSea)
                     { ui.Toast(T("잠수구 밖에서는 문을 잠글 수 없습니다. 먼저 선내로 들어오세요.", "Return inside before closing the dive door.")); break; }
-                    World.SetDiveHatchOpen(!World.DiveHatchOpen);
-                    ui.Toast(World.DiveHatchOpen ? T("잠수구 수밀문을 열었습니다.", "Dive hatch opened.") : T("잠수구 수밀문을 닫았습니다.", "Dive hatch closed."));
+                    bool wasOpen = World.DiveHatchOpen;
+                    World.SetDiveHatchOpen(!wasOpen);
+                    if (floodEventActive && wasOpen)
+                    {
+                        floodEventActive = false; floodEventRemaining = 0;
+                        State.RestoreThirst();
+                        bool waterAdded = State.TryAdd(Item.Water);
+                        if (!waterAdded) World.AddPickup(Item.Water, new Vector3(-3.1f, 1.2f, 8.5f), true);
+                        ui.Toast(waterAdded
+                            ? T("수밀문을 닫아 침수를 막았습니다. 갈증이 회복되고 식수 1개를 얻었습니다.", "Hatch secured. Thirst restored and one drinking water received.")
+                            : T("수밀문을 닫아 침수를 막았습니다. 갈증이 회복되었습니다. 식수는 갑판에 놓였습니다.", "Hatch secured. Thirst restored. Drinking water was placed on deck."));
+                    }
+                    else ui.Toast(World.DiveHatchOpen ? T("잠수구 수밀문을 열었습니다.", "Dive hatch opened.") : T("잠수구 수밀문을 닫았습니다.", "Dive hatch closed."));
                     break;
             }
         }
@@ -393,6 +466,12 @@ namespace Drift
                 }
                 if (stormRemaining > 0)
                 { quest.AppendLine(); quest.Append(T("랜덤 이벤트: 폭풍우 · 실내에서 지나가길 기다리세요.", "Random event: Storm · wait it out indoors.")); }
+                if (floodEventActive)
+                {
+                    quest.AppendLine();
+                    quest.Append(T("비상 이벤트: 3분 안에 잠수구 수밀문 닫기 · 남은 시간 ", "Emergency event: close the dive hatch within 3 minutes · time left "));
+                    quest.Append(Mathf.CeilToInt(floodEventRemaining)); quest.Append(T("초", " sec"));
+                }
                 return quest.ToString();
             }
         }

@@ -1160,23 +1160,23 @@ namespace Drift
             Vector3 local = Ship.InverseTransformPoint(position);
             return local.y > 2.0f && Mathf.Abs(local.x) < 3.35f && local.z > -1.0f && local.z < 5.4f;
         }
-        public void RefreshMarkers(DriftState state)
+        public void RefreshMarkers(DriftState state, bool showDiveHatchObjective = false)
         {
             radioWarning.SetActive(state.Stage == StoryStage.Radio);
             foreach (var station in stations)
             {
-                bool show = false;
-                if (state.Stage == StoryStage.FindNote) show = station.Kind == Station.Note;
-                else if (state.Stage == StoryStage.DailyWork)
+                bool show = showDiveHatchObjective && station.Kind == Station.DiveHatch;
+                if (!show && state.Stage == StoryStage.FindNote) show = station.Kind == Station.Note;
+                else if (!show && state.Stage == StoryStage.DailyWork)
                 {
                     show = station.Kind == Station.Fishing && !state.IsDone(TaskId.Food)
                         || station.Kind == Station.Purifier && !state.IsDone(TaskId.Purifier)
                         || station.Kind == Station.Engine && !state.IsDone(TaskId.Fuel)
                         || station.Kind == Station.DeckRepair && !state.IsDone(TaskId.Deck);
                 }
-                else if (state.Stage == StoryStage.Radio) show = station.Kind == Station.Radio;
-                else if (state.Stage == StoryStage.SteerWest) show = station.Kind == Station.Helm;
-                else if (state.Stage == StoryStage.RepairPurifier) show = station.Kind == Station.Purifier;
+                else if (!show && state.Stage == StoryStage.Radio) show = station.Kind == Station.Radio;
+                else if (!show && state.Stage == StoryStage.SteerWest) show = station.Kind == Station.Helm;
+                else if (!show && state.Stage == StoryStage.RepairPurifier) show = station.Kind == Station.Purifier;
                 station.ShowMarker(show);
                 if (station.Kind == Station.DeckRepair)
                 {

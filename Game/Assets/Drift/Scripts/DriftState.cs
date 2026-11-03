@@ -136,6 +136,11 @@ namespace Drift
             PurifierWater--;
             return true;
         }
+        public void FillPurifierTank()
+        {
+            PurifierWater = PurifierCapacity;
+            PurificationRemaining = 0;
+        }
         public void TakeDamage(float damage) { if (damage > 0) Health = Math.Max(0, Health - damage); }
         public void TickBreath(float seconds, bool underwater)
         {
