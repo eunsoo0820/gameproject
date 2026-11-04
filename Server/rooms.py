@@ -42,7 +42,7 @@ def handle(action, data):
             code = "".join(secrets.choice(alphabet) for _ in range(5))
             if code not in rooms and any(c.isdigit() for c in code) and any(c.isalpha() for c in code):
                 break
-        rooms[code] = {"members": {}, "host": "", "departed": False, "tasks": 0, "stage": 0,
+        rooms[code] = {"harbor": bool(data.get("harbor")), "members": {}, "host": "", "departed": False, "tasks": 0, "stage": 0,
                        "ship": dict(time=now, driver="", speed=0., sx=0., sz=0., angle=0.),
                        "taken": {}, "drops": {}, "water": 0, "purify": 0, "rainFilled": False, "part": False}
     room = rooms.get(code)
@@ -50,6 +50,8 @@ def handle(action, data):
         raise ValueError("ROOM")
     members = room["members"]
     if action in ("create", "join"):
+        if bool(data.get("harbor")) != room["harbor"]:
+            raise ValueError("VERSION")
         if room["departed"] or len(members) >= 6:
             raise ValueError("CLOSED")
         token = secrets.token_urlsafe(24)
@@ -64,7 +66,19 @@ def handle(action, data):
         if crew not in ("Daniel", "Charles", "Ellis", "Alice", "Karl", "Carl", "Emma", "Mina"):
             raise ValueError("CREW")
         members[token]["crew"] = crew
-    if action == "depart":
+    if action == "dock" and not room["departed"]:
+        pose = {key: float(data[key]) for key in ("x", "y", "z", "yaw")}
+        if not all(math.isfinite(v) for v in pose.values()):
+            raise ValueError("POSE")
+        member = members[token]
+        member["aboard"] = bool(data.get("aboard")) and bool(member["crew"])
+        member["dockPose"] = dict(pose, id=member["id"], crew=member["crew"], held=0)
+    aboard = sum(bool(m.get("aboard")) and now - m["seen"] < 5 for m in members.values())
+    if action == "depart" and not room["departed"]:
+        if room["harbor"]:
+            pose = members[token].get("dockPose", {})
+            if aboard != len(members) or abs(pose.get("x", 100) + .81) > 3 or abs(pose.get("z", 100) + .35) > 3 or not 2 < pose.get("y", 0) < 5:
+                raise ValueError("WAIT")
         if not all(member["crew"] for member in members.values()):
             raise ValueError("WAIT")
         room["departed"] = True
@@ -124,7 +138,7 @@ def handle(action, data):
         del members[token]
     ship = room["ship"]
     member = members.get(token, {})
-    return dict(water=room["water"], remaining=max(0, room["purify"] - now), part=room["part"], helm=ship["driver"] == token, sx=ship["sx"], sz=ship["sz"], angle=ship["angle"], speed=ship["speed"],
+    return dict(boarded=aboard, total=len(members), dockPeers=[m["dockPose"] for k,m in members.items() if k != token and "dockPose" in m and not room["departed"]], water=room["water"], remaining=max(0, room["purify"] - now), part=room["part"], helm=ship["driver"] == token, sx=ship["sx"], sz=ship["sz"], angle=ship["angle"], speed=ship["speed"],
                 taken=list(room["taken"]), drops=list(room["drops"].values()), op=member.get("op", 0), won=member.get("won", False),
                 code=code, token=token, departed=room["departed"],
                 tasks=room["tasks"], stage=room["stage"],
