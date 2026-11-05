@@ -73,11 +73,35 @@ namespace Drift
         }
         public void Select(int index) { if (index >= 0 && index < HotbarSlots) SelectedSlot = index; }
         public bool IsDone(TaskId task) => tasks[(int)task];
+        public int CompletedTasks
+        {
+            get
+            {
+                int mask = 0;
+                for (int i = 0; i < tasks.Length; i++) if (tasks[i]) mask |= 1 << i;
+                return mask;
+            }
+        }
+        public void MergeCrewProgress(int mask, StoryStage stage)
+        {
+            for (int i = 0; i < tasks.Length; i++) tasks[i] |= (mask & (1 << i)) != 0;
+            if (stage <= Stage || stage > StoryStage.Complete) return;
+            Stage = stage;
+            WestReached = stage >= StoryStage.GullStrike;
+            PurifierBroken = stage == StoryStage.FindPurifierPart || stage == StoryStage.RepairPurifier;
+            PurifierRepaired = stage == StoryStage.Complete;
+        }
         public int Count(Item item)
         {
             int total = 0;
             for (int i = 0; i < InventorySlots; i++) if (slots[i].Item == item) total += slots[i].Count;
             return total;
+        }
+        public bool CanCarry(Item item)
+        {
+            for (int i = 0; i < InventorySlots; i++)
+                if (slots[i].Count == 0 || (slots[i].Item == item && slots[i].Count < StackLimit)) return true;
+            return false;
         }
         public bool TryAdd(Item item, int count = 1)
         {
@@ -135,6 +159,11 @@ namespace Drift
             if (PurifierWater <= 0 || !TryAdd(Item.Water)) return false;
             PurifierWater--;
             return true;
+        }
+        public void SetSharedTank(int water, float remaining)
+        {
+            PurifierWater = water;
+            PurificationRemaining = remaining;
         }
         public void FillPurifierTank()
         {

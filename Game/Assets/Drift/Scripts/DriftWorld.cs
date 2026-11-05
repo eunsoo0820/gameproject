@@ -1044,9 +1044,31 @@ namespace Drift
                         Cylinder("Floating filter cartridge", parent, Vector3.zero, new Vector3(.16f, .4f, .16f), cream, Vector3.forward);
                         Cylinder("Filter end band", parent, new Vector3(0, 0, .2f), new Vector3(.2f, .08f, .2f), teal, Vector3.forward);
                     }
+                    else if (item == Item.Fish)
+                    {
+                        Box("Fish body", parent, Vector3.zero, new Vector3(.12f, .14f, .38f), teal, false);
+                        Box("Fish tail", parent, Vector3.back * .21f, new Vector3(.045f, .2f, .1f), steel, false);
+                    }
+                    else if (item == Item.Scrap)
+                        Box("Scrap plate", parent, Vector3.zero, new Vector3(.3f, .055f, .36f), rust, false);
+                    else if (item == Item.Water || item == Item.SeaWater)
+                    {
+                        Cylinder("Water container", parent, Vector3.zero, new Vector3(.17f, .16f, .17f), item == Item.Water ? teal : steel);
+                        Cylinder("Container lid", parent, Vector3.up * .17f, new Vector3(.1f, .03f, .1f), cream);
+                    }
                     else Box("Supply pickup", parent, Vector3.zero, new Vector3(.3f, .28f, .3f), material, false);
                     break;
             }
+        }
+        public GameObject CreateHeldItem(Transform parent, Vector3 grip, Item item)
+        {
+            var model = new GameObject(item.ToString());
+            model.transform.SetParent(parent, false);
+            model.transform.localPosition = grip;
+            model.transform.localRotation = Quaternion.Euler(-12, -8, 0);
+            model.transform.localScale = Vector3.one * .65f;
+            BuildStationVisual(model.transform, Station.Pickup, Vector3.one, cream, item);
+            return model;
         }
         public bool CanDrop => drops.Count < 64;
         public float WaterSurfaceY => root.TransformPoint(new Vector3(0, WaterSurfaceLocalY, 0)).y;
@@ -1069,10 +1091,10 @@ namespace Drift
             }
         }
         public bool IsExposed(Vector3 worldPosition) => Ship.InverseTransformPoint(worldPosition).y > .3f && !InsideWheelhouse(worldPosition);
-        public void SpawnPurifierPartAtSea()
+        public DriftInteractable SpawnPurifierPartAtSea(bool shared = false)
         {
-            float z = Random.Range(8.1f, 9.0f);
-            AddPickup(Item.PurifierPart, new Vector3(HullBeamAt(z) + 1.2f, WaterSurfaceShipLocalY, z), true);
+            float z = shared ? 8.55f : Random.Range(8.1f, 9.0f);
+            return AddPickup(Item.PurifierPart, new Vector3(HullBeamAt(z) + 1.2f, WaterSurfaceShipLocalY, z), true);
         }
         public void SetStorm(bool active)
         {
@@ -1115,6 +1137,52 @@ namespace Drift
             gullFlight = -1; Gull.gameObject.SetActive(false);
             radioWarning.SetActive(false);
             SetStorm(false);
+        }
+        private GameObject harbor;
+        public void OpenHarbor()
+        {
+            CloseHarbor();
+            harbor = new GameObject("Departure harbor");
+            harbor.transform.SetParent(Ship, false);
+            var dock = harbor.transform;
+            Box("Timber pier", dock, new Vector3(0, .7f, 23), new Vector3(9, .65f, 14), wood);
+            Box("Boarding gangway", dock, new Vector3(0, 1.04f, 15.7f), new Vector3(2, .22f, 6), cream);
+            Box("Harbor office", dock, new Vector3(-2.7f, 2.22f, 27), new Vector3(3, 2.5f, 3), teal);
+            Box("Office roof", dock, new Vector3(-2.7f, 3.55f, 27), new Vector3(3.4f, .22f, 3.4f), rust);
+            for (int z = 18; z < 30; z += 3)
+                foreach (int side in new[] { -1, 1 })
+                    Box("Pier piling", dock, new Vector3(side * 4.2f, -.55f, z), new Vector3(.35f, 4, .35f), wood);
+        }
+        public void CloseHarbor()
+        {
+            if (harbor == null) return;
+            harbor.SetActive(false);
+            Object.Destroy(harbor);
+            harbor = null;
+        }
+        public bool IsAboard(Vector3 pos)
+        {
+            return Mathf.Abs(pos.z) < 14 && Mathf.Abs(pos.x) < HullBeamAt(pos.z) && pos.y > .5f && pos.y < 9;
+        }
+        public void SetRoomLayout(string code)
+        {
+            int seed = 0;
+            foreach (char c in code) seed = unchecked(seed * 31 + c);
+            var random = new System.Random(seed);
+            foreach (var station in new[] {rainBarrel, seawaterBucket, fishingRod})
+            {
+                Vector3 pos = station.transform.localPosition;
+                pos.x = (float)random.NextDouble() * 8 - 4;
+                pos.z = (float)random.NextDouble() * 24 - 12;
+                station.transform.localPosition = pos;
+            }
+        }
+        public void ApplyShip(float x, float z, float angle, float speed)
+        {
+            Ship.localPosition = new Vector3(x, Ship.localPosition.y, z);
+            Vector3 rotation = Ship.localEulerAngles;
+            Ship.localRotation = Quaternion.Euler(rotation.x, angle, rotation.z);
+            shipSpeed = speed;
         }
         public void Steer(float rudder, float throttle, float dt)
         {

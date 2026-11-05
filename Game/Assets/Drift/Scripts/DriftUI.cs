@@ -7,7 +7,7 @@ using UnityEngine.InputSystem.UI;
 
 namespace Drift
 {
-    public enum ScreenId { Menu, Voyage, Room, CharacterSelect, Settings, Credits, Playing, Pause, Inventory, Chat, Dialogue, Dead }
+    public enum ScreenId { Menu, Voyage, Room, CharacterSelect, Settings, Credits, Playing, Pause, Inventory, Chat, Dialogue, Dead, JoinRoom, DepartPrompt }
     public sealed class DriftUI
     {
         private readonly DriftApplication app;
@@ -110,23 +110,37 @@ namespace Drift
             for (int i = pages.childCount - 1; i >= 0; i--) { var old = pages.GetChild(i).gameObject; old.SetActive(false); UnityEngine.Object.Destroy(old); }
             bindingStatus = null; chatInput = null; volumeSlider = null; volumeLabel = null;
             hud.gameObject.SetActive(screen == ScreenId.Playing);
-            if (screen == ScreenId.Playing) return;
+            if (screen == ScreenId.Playing) { if (app.RoomCode.Length > 0) Label(pages, app.RoomCode, 1450, 10, 300, 55, 30); return; }
             switch (screen)
             {
                 case ScreenId.Menu: MainMenu(); break;
                 case ScreenId.Voyage:
                     var voyage = Page(T("항해", "VOYAGE"), T("새로운 항해를 준비하세요.", "Prepare your next voyage."));
                     Button(voyage, T("방 만들기", "Create room"), 72, 245, 650, 82, app.CreateRoom);
-                    Button(voyage, T("방 들어가기 · 추후 지원", "Join room · coming later"), 72, 350, 650, 82, null, false);
+                    Button(voyage, T("방 참가", "Join room"), 72, 350, 650, 82, () => app.Navigate(ScreenId.JoinRoom));
                     Back(voyage, () => app.Navigate(ScreenId.Menu)); break;
+                case ScreenId.JoinRoom:
+                    var join = Page(T("방 참가", "Join room"), T("대소문자를 구분하여 5자리 방 번호를 입력하세요.", "Enter the five-character case-sensitive room code."));
+                    var box = Panel(join, 72, 245, 650, 80, teal);
+                    box.GetComponent<UnityEngine.UI.Image>().raycastTarget = true;
+                    var input = box.gameObject.AddComponent<TMP_InputField>();
+                    input.textViewport = box;
+                    input.textComponent = (TextMeshProUGUI)Label(box, "", 15, 10, 610, 60, 32);
+                    input.characterLimit = 5;
+                    Button(join, T("참가", "Join"), 72, 350, 650, 82, () => app.JoinRoom(input.text));
+                    Back(join, () => app.Navigate(ScreenId.Menu)); break;
                 case ScreenId.Room:
-                    var room = Page(T("출항 준비", "READY TO DEPART"), T("로컬 방 · 참가자 1명\n온라인 접속은 이후 버전에서 지원합니다.", "Local room · 1 participant\nOnline connections arrive in a later version."));
-                    Label(room, T("낡은 선박, 끊어진 무전.\n오늘의 작업부터 시작하세요.", "An aging ship. A broken transmission.\nBegin with today's work."), 72, 245, 1100, 145, 34);
-                    Button(room, T("캐릭터 선택", "Choose character"), 72, 450, 650, 82, () => app.Navigate(ScreenId.CharacterSelect)); Back(room, () => app.Navigate(ScreenId.Voyage)); break;
+                    harborHint = Label(pages, "", 450, 850, 1150, 100, 30);
+                    Label(pages, "·", 950, 511, 40, 50, 30);
+                    break;
+                case ScreenId.DepartPrompt:
+                    var prompt = Page(T("조타기", "Helm"), T("시작하시겠습니까?", "Start the voyage?"));
+                    Button(prompt, T("1. 아니 아직", "1. Not yet"), 72, 245, 650, 82, () => app.Navigate(ScreenId.Room));
+                    Button(prompt, T("2. 출항", "2. Depart"), 72, 350, 650, 82, app.DepartRoom); break;
                 case ScreenId.CharacterSelect: CharacterSelectPage(); break;
                 case ScreenId.Settings: SettingsPage(); break;
                 case ScreenId.Credits:
-                    var credits = Page(T("크레딧", "CREDITS"), "drift");
+                    var credits = Page(T("크레딧", "CREDITS"), "Sail Together");
                     Label(credits, T("제작진 정보는 추후 등록됩니다.\n\n현재 오디오는 절차적으로 합성한 임시 효과음입니다.", "Production credits will be added later.\n\nCurrent audio uses procedural placeholder effects."), 72, 245, 1500, 250, 29);
                     Back(credits, () => app.Navigate(ScreenId.Menu)); break;
                 case ScreenId.Pause:
@@ -145,19 +159,21 @@ namespace Drift
             }
             if (screen != ScreenId.Chat)
                 foreach (var button in pageButtons) if (button.interactable) { EventSystem.current.SetSelectedGameObject(button.gameObject); break; }
+            if (app.RoomCode.Length > 0) Label(pages, app.RoomCode, 1450, 10, 300, 55, 30);
         }
         private void MainMenu()
         {
             var panel = Panel(pages, 0, 0, 810, 1080, new Color(.025f, .06f, .075f, .93f));
             Panel(panel, 104, 145, 80, 4, teal);
             Label(panel, "A SURVIVAL VOYAGE", 104, 173, 650, 44, 22);
-            Label(panel, "drift", 91, 210, 680, 225, 150);
+            Label(panel, "Sail Together", 91, 210, 680, 225, 94);
             Label(panel, T("수평선 너머, 아직 끝나지 않은 항해.", "Beyond the horizon, the voyage continues."), 104, 441, 620, 90, 27);
-            Button(panel, T("항해", "Voyage"), 104, 581, 590, 85, () => app.Navigate(ScreenId.Voyage));
+            Button(panel, T("방 만들기", "Create room"), 104, 581, 280, 85, app.CreateRoom);
+            Button(panel, T("방 참가", "Join room"), 410, 581, 284, 85, () => app.Navigate(ScreenId.JoinRoom));
             Button(panel, T("설정", "Settings"), 104, 681, 590, 85, app.OpenSettings);
             Button(panel, T("크레딧", "Credits"), 104, 781, 590, 85, () => app.Navigate(ScreenId.Credits));
             Button(panel, T("게임 종료", "Quit game"), 104, 881, 590, 85, app.QuitGame);
-            Label(panel, "DRIFT  /  EARLY DEVELOPMENT", 104, 972, 640, 38, 18);
+            Label(panel, "SAIL TOGETHER  /  EARLY DEVELOPMENT", 104, 972, 640, 38, 18);
             Label(pages, T("바다는 모든 것을 기억한다.", "The sea remembers."), 1140, 917, 670, 75, 33);
         }
         private void CharacterSelectPage()
@@ -177,8 +193,8 @@ namespace Drift
                 if (app.SelectedCharacter == profile.Id) button.targetGraphic.color = teal;
             }
             Label(panel, T("능력치 선택 화면은 플레이 테스트용입니다. 캐릭터 그림과 UI는 나중에 교체할 수 있습니다.", "This is a playable selection prototype. Character art and UI can be replaced later."), 72, 760, 1500, 52, 21);
-            Button(panel, T("선택한 선원으로 출항", "Depart with selected character"), 1050, 835, 610, 75, app.StartVoyage);
-            Back(panel, () => app.Navigate(ScreenId.Room));
+            Button(panel, T("선택 완료 · 항구로 이동", "Confirm and enter harbor"), 1050, 835, 610, 75, app.EnterHarbor);
+            Back(panel, () => app.Navigate(ScreenId.Voyage));
         }
         private void Back(Transform parent, Action action) => Button(parent, T("뒤로", "Back"), 72, 835, 330, 70, action);
         private void SettingsPage()
@@ -249,6 +265,8 @@ namespace Drift
                 hotbarPanels[i].color = !available ? new Color(.06f, .08f, .09f, .7f) : state.SelectedSlot == i ? teal : ink;
             }
         }
+        private TMP_Text harborHint;
+        public void HarborHint(string text) { if (harborHint != null) harborHint.text = text; }
         public void SetPrompt(string text) { if (prompt.text != text) prompt.text = text; }
         public void Dispose()
         {

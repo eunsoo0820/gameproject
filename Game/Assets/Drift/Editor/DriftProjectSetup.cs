@@ -80,7 +80,7 @@ namespace Drift.Editor
                 if (previous.IsValid() && previous.isLoaded) SceneManager.SetActiveScene(previous);
             }
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
-            PlayerSettings.productName = "drift";
+            PlayerSettings.productName = "Sail Together";
             AssetDatabase.SaveAssets();
             if (!previous.IsValid() || !previous.isDirty) EditorSceneManager.OpenScene(ScenePath);
             Debug.Log("DRIFT_SETUP_OK: " + ScenePath);

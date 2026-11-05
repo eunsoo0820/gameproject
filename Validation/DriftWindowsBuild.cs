@@ -12,7 +12,7 @@ public static class DriftWindowsBuild
         if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Exit Play Mode before building.");
         var scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
         if (scenes.Length != 1 || scenes[0] != "Assets/Drift/Scenes/Drift.unity") throw new InvalidOperationException("Unexpected startup scene configuration.");
-        string output = Path.GetFullPath("../Builds/Windows-20261006/drift.exe");
+        string output = Path.GetFullPath("../Builds/SailTogether/Sail Together.exe");
         Directory.CreateDirectory(Path.GetDirectoryName(output));
         string reportFile = Path.GetFullPath("../Validation/windows-build-result.txt");
         File.WriteAllText(reportFile, "BUILDING");

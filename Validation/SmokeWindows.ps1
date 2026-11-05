@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
-$executable = Join-Path $workspace 'Builds/Windows-20261006/drift.exe'
+$executable = Join-Path $workspace 'Builds/SailTogether/Sail Together.exe'
 $playerLog = Join-Path $PSScriptRoot 'windows-player.log'
 $resultFile = Join-Path $PSScriptRoot 'windows-launch-result.txt'
 if (-not (Test-Path -LiteralPath $executable)) { throw 'Build executable is missing.' }
